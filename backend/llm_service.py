@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Enhanced LLM Service - FIXED Version
+Enhanced LLM Service - PRODUCTION Version
 With proper cache separation (Questions vs Analysis)
+Fixed: Import errors resolved
 """
 
 import google.generativeai as genai
@@ -12,17 +13,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import advanced cache system
+# Import advanced cache system - WITH ERROR HANDLING
 try:
     from advanced_smart_cache import advanced_cache
-    from similarity_engine import similarity_engine
     CACHE_ENABLED = True
-    logger.info("✅ Advanced smart cache system loaded (FIXED version)")
+    logger.info("✅ Advanced smart cache system loaded")
 except ImportError as e:
     logger.warning(f"⚠️ Cache system not available: {e}. Caching disabled.")
     CACHE_ENABLED = False
     advanced_cache = None
-    similarity_engine = None
 
 
 class EnhancedLLMService:
@@ -101,12 +100,15 @@ class EnhancedLLMService:
         # TRY ANALYSIS CACHE FIRST
         if CACHE_ENABLED:
             logger.info("🔍 Checking analysis cache...")
-            cached_analysis = advanced_cache.get_exact_analysis(job_description)
-            
-            if cached_analysis:
-                logger.info(f"✅ ANALYSIS CACHE HIT - Using cached analysis")
-                self.cache_stats['cache_hits'] += 1
-                return cached_analysis
+            try:
+                cached_analysis = advanced_cache.get_exact_analysis(job_description)
+                
+                if cached_analysis:
+                    logger.info(f"✅ ANALYSIS CACHE HIT - Using cached analysis")
+                    self.cache_stats['cache_hits'] += 1
+                    return cached_analysis
+            except Exception as e:
+                logger.warning(f"Cache lookup failed: {e}")
         
         # NOT CACHED, CALL API
         logger.info("🚀 Calling Gemini API for new analysis...")
@@ -178,14 +180,17 @@ Fill in the values based on analysis. suggested_questions must be 3-6."""
         # TRY QUESTIONS CACHE
         if CACHE_ENABLED:
             logger.info("🧠 Checking questions cache...")
-            cached_questions, strategy = advanced_cache.get_smart_response(
-                job_role=job_role, job_description=job_description, difficulty=difficulty
-            )
-            
-            if cached_questions:
-                self.cache_stats['cache_hits'] += 1
-                logger.info(f"✅ QUESTIONS CACHE HIT ({strategy}): Using cached questions")
-                return cached_questions[:num_questions]
+            try:
+                cached_questions, strategy = advanced_cache.get_smart_response(
+                    job_role=job_role, job_description=job_description, difficulty=difficulty
+                )
+                
+                if cached_questions:
+                    self.cache_stats['cache_hits'] += 1
+                    logger.info(f"✅ QUESTIONS CACHE HIT ({strategy}): Using cached questions")
+                    return cached_questions[:num_questions]
+            except Exception as e:
+                logger.warning(f"Cache lookup failed: {e}")
         
         # NOT IN CACHE, GENERATE NEW
         logger.info(f"🚀 Generating NEW questions for {job_role} ({difficulty})")
@@ -394,7 +399,11 @@ interview_readiness must be 1-10."""
     def get_cache_stats(self) -> dict:
         """Get cache statistics for monitoring"""
         if CACHE_ENABLED:
-            advanced_stats = advanced_cache.stats_summary()
-            return {'llm_service_stats': self.cache_stats, 'advanced_cache_stats': advanced_stats, 'cache_enabled': True, 'efficiency_summary': advanced_cache.get_cache_status()}
+            try:
+                advanced_stats = advanced_cache.stats_summary()
+                return {'llm_service_stats': self.cache_stats, 'advanced_cache_stats': advanced_stats, 'cache_enabled': True, 'efficiency_summary': advanced_cache.get_cache_status()}
+            except Exception as e:
+                logger.warning(f"Failed to get cache stats: {e}")
+                return {'cache_enabled': True, 'error': str(e)}
         else:
             return {'cache_enabled': False, 'message': 'Cache system not available'}
