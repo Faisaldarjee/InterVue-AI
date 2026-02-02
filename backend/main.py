@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 # Local imports
 from llm_service import EnhancedLLMService
 from resume_parser import ResumeParser
-from models import Answer, InterviewSession
+from rapid_fire_mode import RapidFireMode
+from models import Answer, InterviewSession, RapidFireStartRequest
 
 load_dotenv()
 
@@ -50,6 +51,13 @@ try:
 except Exception as e:
     logger.error(f"❌ LLM Service initialization failed: {str(e)}")
     llm = None
+
+try:
+    rapid_fire = RapidFireMode()
+    logger.info("✅ Rapid Fire Mode initialized")
+except Exception as e:
+    logger.error(f"❌ Rapid Fire initialization failed: {str(e)}")
+    rapid_fire = None
 
 sessions: Dict[str, InterviewSession] = {}
 analytics = {
@@ -197,6 +205,73 @@ async def upload_resume(
         logger.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+    except Exception as e:
+        logger.error(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/start-rapid-fire")
+async def start_rapid_fire(
+    request: RapidFireStartRequest
+):
+    """
+    Start a Rapid Fire interview session (Frontend Compatible)
+    """
+    try:
+        logger.info(f"🔥 Starting Rapid Fire (Frontend) for: {request.job_role}")
+        
+        if not rapid_fire:
+            raise HTTPException(status_code=503, detail="Rapid Fire service unavailable")
+        
+        # Generate questions
+        questions = rapid_fire.generate_rapid_fire_questions(llm, request.job_role)
+        config = rapid_fire.get_config()
+        
+        # Create session
+        session_id = str(uuid.uuid4())
+        sessions[session_id] = InterviewSession(
+            session_id=session_id,
+            job_role=request.job_role,
+            job_description="Rapid Fire Mode",
+            resume_text="N/A",  # Not needed for Rapid Fire
+            analysis={"mode": "rapid_fire"},
+            questions=questions,
+            answers=[],
+            current_question_index=0,
+            started_at=datetime.now(),
+            mode="rapid_fire"
+        )
+        
+        analytics["total_sessions"] += 1
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "interview_id": session_id,  # Frontend expects this key
+            "mode": "rapid_fire",
+            "config": config,
+            "first_question": questions[0] if questions else None,
+            "total_questions": len(questions),
+            "interview_tips": [
+                "Keep answers concise",
+                "You have 60 seconds per question",
+                "Focus on key points",
+                "Stay calm under pressure"
+            ]
+        }
+
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rapid-fire/{session_id}/submit-answer")
+async def submit_rapid_fire_answer(session_id: str, user_ans: Answer):
+    """
+    Rapid Fire specific submission endpoint to match frontend route
+    """
+    return await submit_answer(session_id, user_ans)
+
 @app.post("/submit-answer/{session_id}")
 async def submit_answer(session_id: str, user_ans: Answer):
     """
@@ -214,22 +289,31 @@ async def submit_answer(session_id: str, user_ans: Answer):
         if idx >= len(session.questions):
             return {"status": "completed"}
         
-        if not user_ans.answer or len(user_ans.answer.strip()) < 10:
-            raise HTTPException(
-                status_code=400,
-                detail="Please provide a meaningful answer (at least 10 characters)"
-            )
+        if not user_ans.answer or len(user_ans.answer.strip()) < 1:
+            # Allow short answers in rapid fire, but warn if empty
+            if len(user_ans.answer.strip()) == 0:
+                 raise HTTPException(status_code=400, detail="Answer cannot be empty")
         
         # ENHANCED: Get detailed feedback with learning insights
         current_q = session.questions[idx]
-        logger.info("🤖 Evaluating answer with learning insights...")
         
-        evaluation = llm.evaluate_answer_with_feedback(
-            current_q["question"],
-            user_ans.answer,
-            current_q.get("type", "General"),
-            current_q.get("sample_answer_points", [])
-        )
+        if session.mode == "rapid_fire":
+             # BATCH MODE: No detailed evaluation during the interview for speed
+             # Just a placeholder to signal "received"
+             evaluation = {
+                 "score": 0,
+                 "feedback": "Answer saved.",
+                 "confidence_indicator": "N/A"
+             }
+        else:
+             # Standard LLM Evaluation
+             logger.info("🤖 Evaluating answer with learning insights...")
+             evaluation = llm.evaluate_answer_with_feedback(
+                current_q["question"],
+                user_ans.answer,
+                current_q.get("type", "General"),
+                current_q.get("sample_answer_points", [])
+             )
         
         # Store answer
         session.answers.append({
@@ -249,8 +333,56 @@ async def submit_answer(session_id: str, user_ans: Answer):
         
         # Check if completed
         if session.current_question_index >= len(session.questions):
-            logger.info("🏆 Interview complete, generating learning report...")
+            logger.info("🏆 Interview complete, generating report...")
             
+            # Handle Rapid Fire Completion
+            if session.mode == "rapid_fire":
+                 session.completed_at = datetime.now()
+                 
+                 # ⚡ KEY CHANGE: Batch Evaluation at the END
+                 logger.info("⚡ Performing Batch AI Evaluation...")
+                 batch_report = llm.evaluate_interview_batch(session.answers, session.job_role)
+                 
+                 # Merge batch scores back into the answers list for consistency
+                 question_evals = batch_report.get('question_evaluations', [])
+                 scores = []
+                 for i, ans in enumerate(session.answers):
+                     if i < len(question_evals):
+                         ans['evaluation'] = question_evals[i] # Update with AI score
+                         # Extract score safely
+                         try:
+                             s = int(question_evals[i].get('score', 0))
+                         except:
+                             s = 0
+                         scores.append(s)
+                     else:
+                         scores.append(0)
+                 
+                 # Prepare final results for frontend
+                 final_results = batch_report.get('overall_report', {})
+                 final_results['scores'] = scores
+                 final_results['best_score'] = max(scores) if scores else 0
+                 final_results['worst_score'] = min(scores) if scores else 0
+                 final_results['total_questions'] = len(session.answers)
+                 
+                 duration = (session.completed_at - session.started_at).total_seconds()
+                 final_results['total_time_seconds'] = duration
+
+                 analytics["completed_interviews"] += 1
+                 
+                 return {
+                     "status": "completed",
+                     "mode": "rapid_fire",
+                     "results": final_results,
+                     "interview_summary": {
+                        "total_questions": len(session.answers),
+                        "average_score": final_results.get('average_score', 0),
+                        "rating": final_results.get('rating', 'N/A'),
+                        "message": final_results.get('summary', 'Completed')
+                     }
+                 }
+            
+            # Standard Mode Completion
             avg_score = sum(a["evaluation"].get("score", 0) for a in session.answers) / len(session.answers)
             
             # ENHANCED: Generate learning report instead of just hiring decision

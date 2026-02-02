@@ -5,6 +5,7 @@ import {
   BookOpen, Lightbulb, Target, BarChart3, Eye
 } from 'lucide-react';
 import axios from 'axios';
+import RapidFire from './RapidFire'; // ADD THIS LINE
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -33,7 +34,7 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== LANDING PAGE ====================
-function LandingPage({ onStartInterview }) {
+function LandingPage({ onStartInterview, onStartRapidFire }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobRole, setJobRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -199,92 +200,122 @@ function LandingPage({ onStartInterview }) {
             {/* Form Side */}
             <div className="lg:col-span-2">
               <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 space-y-6">
-                <h2 className="text-2xl font-bold text-white">Start Smart Interview</h2>
+                <h2 className="text-2xl font-bold text-white">Choose Your Interview Style</h2>
 
-                {/* Resume Upload */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-3">
-                    <Upload size={18} className="inline mr-2" />
-                    Upload Resume
-                  </label>
-                  <div
-                    onDragEnter={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDragOver={handleDrag}
-                    onDrop={handleDrop}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                      dragActive
-                        ? 'border-blue-400 bg-blue-500/20'
-                        : 'border-slate-600 hover:border-blue-500/60 bg-slate-800/50'
-                    }`}
+                {/* TWO BUTTONS SECTION - RAPID FIRE + STANDARD */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  {/* RAPID FIRE BUTTON */}
+                  <button
+                    onClick={onStartRapidFire}
+                    className="p-6 bg-gradient-to-br from-red-600/20 to-red-900/20 hover:from-red-600/30 hover:to-red-900/30 border-2 border-red-500/40 hover:border-red-500/60 rounded-xl transition-all group"
                   >
-                    <Upload size={40} className="mx-auto mb-3 text-blue-400" />
-                    <p className="text-white font-semibold">Drag resume here or</p>
-                    <label className="inline-block mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition font-semibold text-sm">
-                      Browse Files
-                      <input
-                        type="file"
-                        onChange={handleFileChange}
-                        accept=".pdf,.docx"
-                        className="hidden"
-                      />
+                    <div className="text-2xl mb-2">🔥</div>
+                    <h3 className="text-white font-bold mb-1">Rapid Fire</h3>
+                    <p className="text-red-300 text-xs">8-10 questions • 60 sec each</p>
+                    <p className="text-red-300 text-xs mt-2">Speed challenge mode</p>
+                  </button>
+
+                  {/* STANDARD BUTTON */}
+                  <button
+                    onClick={() => document.querySelector('[data-standard-scroll]')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="p-6 bg-gradient-to-br from-blue-600/20 to-blue-900/20 hover:from-blue-600/30 hover:to-blue-900/30 border-2 border-blue-500/40 hover:border-blue-500/60 rounded-xl transition-all group"
+                  >
+                    <div className="text-2xl mb-2">📝</div>
+                    <h3 className="text-white font-bold mb-1">Standard</h3>
+                    <p className="text-blue-300 text-xs">3-6 questions • Detailed prep</p>
+                    <p className="text-blue-300 text-xs mt-2">Upload resume mode</p>
+                  </button>
+                </div>
+
+                {/* Standard Interview Form */}
+                <div data-standard-scroll className="space-y-6 pt-6 border-t border-slate-600">
+                  <h3 className="text-lg font-semibold text-white">📝 Standard Interview Setup</h3>
+
+                  {/* Resume Upload */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-3">
+                      <Upload size={18} className="inline mr-2" />
+                      Upload Resume
                     </label>
-                    <p className="text-slate-400 text-xs mt-2">PDF or DOCX • Max 200MB</p>
-                  </div>
-                  {resumeFile && (
-                    <div className="mt-3 p-3 bg-green-500/20 border border-green-500/40 rounded-lg flex items-center gap-2">
-                      <CheckCircle size={18} className="text-green-400" />
-                      <span className="text-green-300 text-sm font-semibold">{resumeFile.name}</span>
+                    <div
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                        dragActive
+                          ? 'border-blue-400 bg-blue-500/20'
+                          : 'border-slate-600 hover:border-blue-500/60 bg-slate-800/50'
+                      }`}
+                    >
+                      <Upload size={40} className="mx-auto mb-3 text-blue-400" />
+                      <p className="text-white font-semibold">Drag resume here or</p>
+                      <label className="inline-block mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition font-semibold text-sm">
+                        Browse Files
+                        <input
+                          type="file"
+                          onChange={handleFileChange}
+                          accept=".pdf,.docx"
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-slate-400 text-xs mt-2">PDF or DOCX • Max 200MB</p>
                     </div>
-                  )}
-                </div>
+                    {resumeFile && (
+                      <div className="mt-3 p-3 bg-green-500/20 border border-green-500/40 rounded-lg flex items-center gap-2">
+                        <CheckCircle size={18} className="text-green-400" />
+                        <span className="text-green-300 text-sm font-semibold">{resumeFile.name}</span>
+                      </div>
+                    )}
+                  </div>
 
-                {/* Job Role */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    💼 Job Role
-                  </label>
-                  <input
-                    type="text"
-                    value={jobRole}
-                    onChange={(e) => setJobRole(e.target.value)}
-                    placeholder="e.g., Senior Python Developer"
-                    className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-                  />
-                </div>
+                  {/* Job Role */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      💼 Job Role
+                    </label>
+                    <input
+                      type="text"
+                      value={jobRole}
+                      onChange={(e) => setJobRole(e.target.value)}
+                      placeholder="e.g., Senior Python Developer"
+                      className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+                    />
+                  </div>
 
-                {/* Job Description */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    📋 Job Description
-                  </label>
-                  <textarea
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                    placeholder="Paste job description here..."
-                    rows="4"
-                    className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none"
-                  />
-                </div>
+                  {/* Job Description */}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-300 mb-2">
+                      📋 Job Description
+                    </label>
+                    <textarea
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      placeholder="Paste job description here..."
+                      rows="4"
+                      className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none"
+                    />
+                  </div>
 
-                {/* Start Button */}
-                <button
-                  onClick={handleStartInterview}
-                  disabled={loading || !resumeFile || !jobRole || !jobDescription}
-                  className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
-                >
-                  {loading ? (
-                    <>
-                      <Loader size={20} className="animate-spin" />
-                      Analyzing & Generating Questions...
-                    </>
-                  ) : (
-                    <>
-                      Start Interview
-                      <ArrowRight size={20} className="group-hover:translate-x-1 transition" />
-                    </>
-                  )}
-                </button>
+                  {/* Start Standard Button */}
+                  <button
+                    onClick={handleStartInterview}
+                    disabled={loading || !resumeFile || !jobRole || !jobDescription}
+                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader size={20} className="animate-spin" />
+                        Analyzing & Generating Questions...
+                      </>
+                    ) : (
+                      <>
+                        Start Standard Interview
+                        <ArrowRight size={20} className="group-hover:translate-x-1 transition" />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -683,10 +714,22 @@ export default function App() {
     setInterviewSession(null);
   };
 
+  // ADD THESE TWO FUNCTIONS:
+  const handleStartRapidFire = () => {
+    setPage('rapid-fire');
+  };
+
+  const handleBackToHome = () => {
+    setPage('landing');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950">
       {page === 'landing' && (
-        <LandingPage onStartInterview={handleStartInterview} />
+        <LandingPage 
+          onStartInterview={handleStartInterview}
+          onStartRapidFire={handleStartRapidFire}
+        />
       )}
       {page === 'interview' && interviewSession && (
         <InterviewPage 
@@ -704,6 +747,10 @@ export default function App() {
           data={interviewSession.results}
           onNewInterview={handleNewInterview}
         />
+      )}
+      {/* ADD THIS: */}
+      {page === 'rapid-fire' && (
+        <RapidFire onBack={handleBackToHome} />
       )}
     </div>
   );

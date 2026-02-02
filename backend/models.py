@@ -37,6 +37,7 @@ class InterviewSession(BaseModel):
     started_at: datetime
     completed_at: Optional[datetime] = None
     final_report: Optional[Dict[str, Any]] = None
+    mode: str = "standard"  # "standard" or "rapid_fire"
 
 class ResumeAnalysis(BaseModel):
     """Resume analysis result"""
@@ -70,3 +71,8 @@ class AnswerResponse(BaseModel):
     next_question: Optional[Dict[str, Any]] = None
     final_report: Optional[Dict[str, Any]] = None
     progress: Optional[Dict[str, int]] = None
+
+class RapidFireStartRequest(BaseModel):
+    """Request model for starting rapid fire"""
+    job_role: str
+    difficulty: str = "medium"

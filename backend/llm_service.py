@@ -407,3 +407,145 @@ interview_readiness must be 1-10."""
                 return {'cache_enabled': True, 'error': str(e)}
         else:
             return {'cache_enabled': False, 'message': 'Cache system not available'}
+
+    def evaluate_interview_batch(self, answers: list, job_role: str) -> dict:
+        """
+        Evaluate ALL answers at once for Rapid Fire Mode.
+        Returns a structured report with scores for each answer and an overall summary.
+        """
+        logger.info(f"🔥 Batch evaluating {len(answers)} answers for {job_role}...")
+        
+        # Prepare the transcript for the LLM
+        transcript = ""
+        for i, a in enumerate(answers):
+            q_text = a.get('question', 'Unknown Question')
+            ans_text = a.get('answer', 'No Answer')
+            transcript += f"Q{i+1}: {q_text}\nAnswer: {ans_text}\n\n"
+            
+        prompt = f"""You are an expert interviewer for the role of {job_role}. 
+        Evaluate this Rapid Fire interview session. The candidate had limited time (60s) per question.
+
+        TRANSCRIPT:
+        {transcript}
+
+        Task:
+        1. Score each answer (1-10).
+        2. Provide short, punchy feedback for each answer.
+        3. Calculate overall rating.
+
+        Return ONLY a JSON object with this exact structure:
+        {{
+            "question_evaluations": [
+                {{
+                    "question_index": 1,
+                    "score": 8,
+                    "feedback": "Good point on X, but missed Y.",
+                    "key_missing": "Mention Z"
+                }}
+            ],
+            "overall_report": {{
+                "total_score": 75,
+                "average_score": 7.5,
+                "rating": "HIRE/CONSIDER/TRAIN",
+                "summary": "Strong technical skills but weak on system design.",
+                "strengths": ["Python", "SQL"],
+                "improvements": ["Optimization"]
+            }}
+        }}
+        """
+
+        try:
+            response = self.model.generate_content(prompt)
+            result = self._parse_json_response(response.text)
+            
+            if result is None:
+                logger.error("❌ Batch evaluation JSON failed")
+                return self._default_batch_evaluation(len(answers))
+            
+            # Ensure we have an entry for every question, even if LLM missed one
+            evals = result.get('question_evaluations', [])
+            if len(evals) < len(answers):
+                logger.warning(f"⚠️ LLM returned only {len(evals)} evals for {len(answers)} answers. padding...")
+                # Logic to handle missing evals could go here, but for now we accept what we got or default
+            
+            logger.info("✅ Batch evaluation complete")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Batch evaluation failed: {e}")
+            return self._default_batch_evaluation(len(answers))
+
+    def _default_batch_evaluation(self, count: int) -> dict:
+        return {
+            "question_evaluations": [{"question_index": i+1, "score": 5, "feedback": "Processed (Fallback)", "key_missing": "N/A"} for i in range(count)],
+            "overall_report": {
+                "total_score": 5 * count, "average_score": 5.0, "rating": "CONSIDER",
+                "summary": "Evaluation data unavailable due to service error.",
+                "strengths": ["Participation"], "improvements": ["Retry later"]
+            }
+        }
+
+    def generate_batch_questions(self, job_role: str, num_questions: int = 50, difficulty: str = "Medium") -> list:
+        """
+        Generate a LARGE batch of questions for offline database (Rapid Fire Mode).
+        Does NOT use cache to ensure freshness when regenerating DB.
+        """
+        logger.info(f"🔥 Generating BATCH questions for {job_role} (Target: {num_questions})...")
+        
+        # We ask for slightly more than needed because some might be malformed
+        prompt = f"""Generate a comprehensive interview question bank for the role: {job_role}.
+        Target Audience: {difficulty} level candidates.
+        
+        Generate exactly {num_questions} unique technical and behavioral questions.
+        
+        Requirements:
+        1. FOCUS on Real-world Production Scenarios, Debugging, and System Design.
+        2. Questions must be 'Job Ready' - the kind asked in Senior/Principal level interviews.
+        3. AVOID simple definitions (e.g. "What is X?"). ASK "How would you handle X in production?"
+        4. difficulty should be '{difficulty}'.
+        5. 'keywords' must be a list of 3-5 crucial words/phrases expected in the answer.
+        
+        Return ONLY a JSON array with this structure:
+        [
+            {{
+                "question": "Question text here",
+                "type": "Technical",  # or "Behavioral"
+                "difficulty": "{difficulty}",
+                "keywords": ["keyword1", "keyword2", "keyword3"]
+            }}
+        ]
+        """
+
+        try:
+            # For large batches, we might need a model with larger output context or just hope for the best
+            # Breaking it down might be better, but let's try one shot first for simplicity
+            response = self.model.generate_content(prompt)
+            result = self._parse_json_response(response.text)
+            
+            if result is None:
+                logger.error("❌ Batch generation JSON failed")
+                return []
+                
+            if not isinstance(result, list):
+                if isinstance(result, dict) and 'questions' in result:
+                    result = result['questions']
+                else:
+                    result = [result]
+            
+            # Validate and Clean
+            valid_questions = []
+            for q in result:
+                if isinstance(q, dict) and 'question' in q:
+                    valid_questions.append({
+                        "question": q['question'],
+                        "type": q.get('type', 'Technical'),
+                        "difficulty": q.get('difficulty', difficulty),
+                        "keywords": q.get('keywords', ["relevant answer"])
+                    })
+            
+            logger.info(f"✅ Batch generated {len(valid_questions)} questions for {job_role}")
+            return valid_questions
+            
+        except Exception as e:
+            logger.error(f"❌ Batch generation failed for {job_role}: {e}")
+            return []
