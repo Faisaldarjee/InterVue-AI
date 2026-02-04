@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Upload, Send, Loader, CheckCircle, AlertCircle,
   Award, Clock, ArrowRight, Zap, Brain,
   BookOpen, Lightbulb, Target, BarChart3, Eye
 } from 'lucide-react';
 import axios from 'axios';
-import RapidFire from './RapidFire'; // ADD THIS LINE
+import RapidFire from './RapidFire';
+import VoiceInterview from './VoiceInterview';
+import ResumeUpload from './ResumeUpload';
+import ResumeReport from './ResumeReport';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -34,7 +37,7 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== LANDING PAGE ====================
-function LandingPage({ onStartInterview, onStartRapidFire }) {
+function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobRole, setJobRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -57,7 +60,7 @@ function LandingPage({ onStartInterview, onStartRapidFire }) {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files?.[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type === 'application/pdf' || file.name.endsWith('.docx')) {
@@ -163,7 +166,7 @@ function LandingPage({ onStartInterview, onStartRapidFire }) {
               { icon: BookOpen, label: 'Learn', desc: 'Confidence building' },
               { icon: Target, label: 'Focused', desc: 'Job-specific prep' }
             ].map((feature, idx) => (
-              <div 
+              <div
                 key={idx}
                 className="group p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/50 rounded-lg transition-all"
               >
@@ -200,30 +203,38 @@ function LandingPage({ onStartInterview, onStartRapidFire }) {
             {/* Form Side */}
             <div className="lg:col-span-2">
               <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 space-y-6">
-                <h2 className="text-2xl font-bold text-white">Choose Your Interview Style</h2>
+                <h2 className="text-2xl font-bold text-white">Choose Your Training Mode</h2>
 
-                {/* TWO BUTTONS SECTION - RAPID FIRE + STANDARD */}
-                <div className="grid grid-cols-2 gap-4 mb-6">
+                {/* THREE BUTTONS SECTION - RAPID FIRE + STANDARD + RESUME SCORER */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
                   {/* RAPID FIRE BUTTON */}
                   <button
                     onClick={onStartRapidFire}
-                    className="p-6 bg-gradient-to-br from-red-600/20 to-red-900/20 hover:from-red-600/30 hover:to-red-900/30 border-2 border-red-500/40 hover:border-red-500/60 rounded-xl transition-all group"
+                    className="p-4 bg-gradient-to-br from-red-600/20 to-red-900/20 hover:from-red-600/30 hover:to-red-900/30 border-2 border-red-500/40 hover:border-red-500/60 rounded-xl transition-all group text-left"
                   >
-                    <div className="text-2xl mb-2">🔥</div>
+                    <div className="text-xl mb-2">🔥</div>
                     <h3 className="text-white font-bold mb-1">Rapid Fire</h3>
-                    <p className="text-red-300 text-xs">8-10 questions • 60 sec each</p>
-                    <p className="text-red-300 text-xs mt-2">Speed challenge mode</p>
+                    <p className="text-red-300 text-[10px] sm:text-xs">Speed Mode • 60s/Q</p>
+                  </button>
+
+                  {/* RESUME SCORER BUTTON (NEW) */}
+                  <button
+                    onClick={onStartResumeScorer}
+                    className="p-4 bg-gradient-to-br from-purple-600/20 to-purple-900/20 hover:from-purple-600/30 hover:to-purple-900/30 border-2 border-purple-500/40 hover:border-purple-500/60 rounded-xl transition-all group text-left"
+                  >
+                    <div className="text-xl mb-2">📄</div>
+                    <h3 className="text-white font-bold mb-1">Resume AI</h3>
+                    <p className="text-purple-300 text-[10px] sm:text-xs">Score + ATS Check</p>
                   </button>
 
                   {/* STANDARD BUTTON */}
                   <button
                     onClick={() => document.querySelector('[data-standard-scroll]')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="p-6 bg-gradient-to-br from-blue-600/20 to-blue-900/20 hover:from-blue-600/30 hover:to-blue-900/30 border-2 border-blue-500/40 hover:border-blue-500/60 rounded-xl transition-all group"
+                    className="p-4 bg-gradient-to-br from-blue-600/20 to-blue-900/20 hover:from-blue-600/30 hover:to-blue-900/30 border-2 border-blue-500/40 hover:border-blue-500/60 rounded-xl transition-all group text-left"
                   >
-                    <div className="text-2xl mb-2">📝</div>
+                    <div className="text-xl mb-2">📝</div>
                     <h3 className="text-white font-bold mb-1">Standard</h3>
-                    <p className="text-blue-300 text-xs">3-6 questions • Detailed prep</p>
-                    <p className="text-blue-300 text-xs mt-2">Upload resume mode</p>
+                    <p className="text-blue-300 text-[10px] sm:text-xs">Deep Dive Interview</p>
                   </button>
                 </div>
 
@@ -242,11 +253,10 @@ function LandingPage({ onStartInterview, onStartRapidFire }) {
                       onDragLeave={handleDrag}
                       onDragOver={handleDrag}
                       onDrop={handleDrop}
-                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                        dragActive
-                          ? 'border-blue-400 bg-blue-500/20'
-                          : 'border-slate-600 hover:border-blue-500/60 bg-slate-800/50'
-                      }`}
+                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
+                        ? 'border-blue-400 bg-blue-500/20'
+                        : 'border-slate-600 hover:border-blue-500/60 bg-slate-800/50'
+                        }`}
                     >
                       <Upload size={40} className="mx-auto mb-3 text-blue-400" />
                       <p className="text-white font-semibold">Drag resume here or</p>
@@ -576,11 +586,10 @@ function ResultsPage({ data, onNewInterview }) {
               <h2 className="text-2xl font-bold text-white">Learning Report</h2>
             </div>
 
-            <div className={`inline-block px-6 py-3 rounded-full font-bold mb-6 ${
-              learningReport.confidence_level >= 8 ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
+            <div className={`inline-block px-6 py-3 rounded-full font-bold mb-6 ${learningReport.confidence_level >= 8 ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
               learningReport.confidence_level >= 5 ? 'bg-yellow-500/20 border border-yellow-500/40 text-yellow-300' :
-              'bg-orange-500/20 border border-orange-500/40 text-orange-300'
-            }`}>
+                'bg-orange-500/20 border border-orange-500/40 text-orange-300'
+              }`}>
               Confidence: {learningReport.confidence_level || 5}/10
             </div>
 
@@ -640,12 +649,11 @@ function ResultsPage({ data, onNewInterview }) {
         {finalReport.recommendation && (
           <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-2xl p-8 mb-8">
             <h2 className="text-2xl font-bold text-white mb-4">Interview Readiness</h2>
-            
-            <div className={`inline-block px-6 py-3 rounded-full font-bold mb-6 text-lg ${
-              finalReport.recommendation === 'Strong Hire' ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
+
+            <div className={`inline-block px-6 py-3 rounded-full font-bold mb-6 text-lg ${finalReport.recommendation === 'Strong Hire' ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
               finalReport.recommendation === 'Good Fit' ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300' :
-              'bg-yellow-500/20 border border-yellow-500/40 text-yellow-300'
-            }`}>
+                'bg-yellow-500/20 border border-yellow-500/40 text-yellow-300'
+              }`}>
               {finalReport.recommendation}
             </div>
 
@@ -690,6 +698,7 @@ function ResultsPage({ data, onNewInterview }) {
 export default function App() {
   const [page, setPage] = useState('landing');
   const [interviewSession, setInterviewSession] = useState(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState(null); // New State for Resume Report
 
   const handleStartInterview = (data) => {
     log('handleStartInterview called', data);
@@ -699,7 +708,7 @@ export default function App() {
 
   const handleAnswer = (response) => {
     log('handleAnswer called', response);
-    
+
     if (response.isComplete) {
       setPage('results');
       setInterviewSession({
@@ -723,16 +732,44 @@ export default function App() {
     setPage('landing');
   };
 
+  const handleStartVoiceMode = (data) => {
+    setInterviewSession(data);
+    setPage('voice-mode');
+  };
+
+  const handleStartResumeScorer = () => {
+    setPage('resume-scorer');
+  };
+
+  const handleResumeAnalysisComplete = (data) => {
+    setResumeAnalysis(data);
+    setPage('resume-report');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950">
       {page === 'landing' && (
-        <LandingPage 
+        <LandingPage
           onStartInterview={handleStartInterview}
           onStartRapidFire={handleStartRapidFire}
+          onStartResumeScorer={handleStartResumeScorer}
         />
       )}
+      {/* RESUME SCORER PAGES */}
+      {page === 'resume-scorer' && (
+        <div className="min-h-screen bg-slate-950 relative">
+          <button onClick={handleBackToHome} className="absolute top-6 left-6 text-slate-400 hover:text-white flex items-center gap-2 z-50">← Back</button>
+          <ResumeUpload onAnalysisComplete={handleResumeAnalysisComplete} />
+        </div>
+      )}
+      {page === 'resume-report' && (
+        <div className="min-h-screen bg-slate-950">
+          <ResumeReport analysis={resumeAnalysis} onReset={() => setPage('resume-scorer')} />
+        </div>
+      )}
+
       {page === 'interview' && interviewSession && (
-        <InterviewPage 
+        <InterviewPage
           sessionId={interviewSession.sessionId}
           firstQuestion={interviewSession.firstQuestion}
           totalQuestions={interviewSession.totalQuestions}
@@ -743,14 +780,24 @@ export default function App() {
         />
       )}
       {page === 'results' && interviewSession?.results && (
-        <ResultsPage 
+        <ResultsPage
           data={interviewSession.results}
           onNewInterview={handleNewInterview}
         />
       )}
       {/* ADD THIS: */}
       {page === 'rapid-fire' && (
-        <RapidFire onBack={handleBackToHome} />
+        <RapidFire onBack={handleBackToHome} onStartVoice={handleStartVoiceMode} />
+      )}
+      {page === 'voice-mode' && interviewSession && (
+        <VoiceInterview
+          initialData={interviewSession}
+          onBack={handleBackToHome}
+          onComplete={(data) => {
+            setInterviewSession({ ...interviewSession, results: data });
+            setPage('results');
+          }}
+        />
       )}
     </div>
   );

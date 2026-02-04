@@ -27,11 +27,13 @@ except ImportError as e:
 class EnhancedLLMService:
     def __init__(self):
         """Initialize Gemini AI with enhanced capabilities"""
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
+        self.main_api_key = os.getenv('GEMINI_API_KEY')
+        self.resume_api_key = os.getenv('GEMINI_RESUME_API_KEY')
+        
+        if not self.main_api_key:
             raise ValueError("GEMINI_API_KEY not found in .env")
         
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=self.main_api_key)
         
         # Auto-detect best available model
         print("🔍 Detecting available Gemini models...")
@@ -548,4 +550,68 @@ interview_readiness must be 1-10."""
             
         except Exception as e:
             logger.error(f"❌ Batch generation failed for {job_role}: {e}")
-            return []
+    def analyze_resume(self, resume_text: str) -> dict:
+        """
+        3-in-One Analysis: Score + ATS Check + Magic Rewrite.
+        Uses dedicated Resume API Key if available to save Interview quota.
+        """
+        # Dual Key Logic: Switch context if specific key exists
+        if self.resume_api_key:
+            logger.info("🔑 Switching to GEMINI_RESUME_API_KEY for analysis")
+            genai.configure(api_key=self.resume_api_key)
+        
+        prompt = f"""You are an expert ATS (Applicant Tracking System) and Resume Coach. Analyze this resume text.
+
+RESUME TEXT:
+{resume_text[:3000]}
+
+Task:
+1. **Score**: Calculate a match score (0-100) based on general employability and clarity.
+2. **ATS Check**: Identify critical missing keywords (e.g., Python, SQL, AWS, Leadership) and formatting issues.
+3. **Magic Rewrite**: Identify the 2 weakest bullet points. Rewrite them to be high-impact, using the "Action + Result + Metric" formula (e.g., "Increased sales by 20%...").
+
+Return ONLY a generic JSON object with this exact structure:
+{{
+  "score": 75,
+  "summary": "Strong technical background but lacks leadership keywords.",
+  "ats_feedback": {{
+      "missing_keywords": ["Leadership", "Agile"],
+      "formatting_issues": ["Use standard section headers"]
+  }},
+  "magic_rewrites": [
+      {{
+          "original": "Worked on python api",
+          "rewritten": "Developed high-performance REST APIs using Python/FastAPI, reducing latency by 30%.",
+          "explanation": "Added tech stack detail and quantifiable metric."
+      }}
+  ]
+}}"""
+
+        try:
+            response = self.model.generate_content(prompt)
+            result = self._parse_json_response(response.text)
+            
+            if result is None:
+                logger.error("❌ Resume analysis JSON bad format")
+                return self._default_resume_analysis()
+            
+            # Restore Main Key for Interviews
+            if self.resume_api_key:
+                genai.configure(api_key=self.main_api_key)
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Resume Analysis Failed: {e}")
+            # Ensure key is restored even if error
+            if self.resume_api_key:
+                genai.configure(api_key=self.main_api_key)
+            return self._default_resume_analysis()
+
+    def _default_resume_analysis(self):
+        return {
+            "score": 0,
+            "summary": "Analysis failed. Please try again.",
+            "ats_feedback": {"missing_keywords": [], "formatting_issues": []},
+            "magic_rewrites": []
+        }

@@ -6250,6 +6250,126 @@
         "iteration",
         "assumption validation"
       ]
+    },
+    {
+      "question": "Explain the difference between SQL and NoSQL databases. In what scenarios would you choose a NoSQL database like MongoDB over a relational database like PostgreSQL?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Schema flexibility",
+        "Scalability (Vertical vs Horizontal)",
+        "ACID properties",
+        "Relations",
+        "Use case specific"
+      ]
+    },
+    {
+      "question": "How do you handle authentication and authorization in a RESTful API? Discuss common standards like JWT and OAuth2.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Statelessness",
+        "Token-based auth",
+        "Scopes/Permissions",
+        "Security best practices",
+        "Session management"
+      ]
+    },
+    {
+      "question": "You need to design a scalable API that handles high traffic. What strategies would you implement to ensure reliability and performance?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Caching (Redis)",
+        "Load balancing",
+        "Rate limiting",
+        "Asynchronous processing",
+        "Database indexing"
+      ]
+    },
+    {
+      "question": "Describe the concept of microservices architecture. What are the benefits and challenges compared to a monolithic architecture?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Decoupling",
+        "Independent deployment",
+        "Complexity",
+        "Inter-service communication",
+        "Data consistency"
+      ]
+    },
+    {
+      "question": "Explain the CAP theorem in the context of distributed systems. How does it influence your database choice?",
+      "type": "Technical",
+      "difficulty": "Hard",
+      "keywords": [
+        "Consistency",
+        "Availability",
+        "Partition tolerance",
+        "Trade-offs",
+        "Distributed databases"
+      ]
+    },
+    {
+      "question": "How do you prevent SQL injection and other common security vulnerabilities in a backend application?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Prepared statements",
+        "Input sanitization",
+        "ORM",
+        "OWASP Top 10",
+        "Security audits"
+      ]
+    },
+    {
+      "question": "What is the role of a message broker (e.g., RabbitMQ, Kafka) in a backend architecture? Give an example use case.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Asynchronous messaging",
+        "Decoupling services",
+        "Queueing",
+        "Event-driven architecture",
+        "Throughput"
+      ]
+    },
+    {
+      "question": "Describe your process for writing unit and integration tests for a backend service. What tools and frameworks do you prefer?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Test coverage",
+        "Mocking",
+        "Pytest/Jest",
+        "CI/CD integration",
+        "TDD"
+      ]
+    },
+    {
+      "question": "How do you optimize a slow database query? Walk me through the steps you would take.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "EXPLAIN ANALYZE",
+        "Indexing",
+        "Query restructuring",
+        "N+1 problem",
+        "Database profiling"
+      ]
+    },
+    {
+      "question": "Explain the difference between synchronous and asynchronous programming. When is asynchronous programming particularly useful in backend development?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Blocking vs Non-blocking",
+        "I/O bound operations",
+        "Event loop",
+        "Concurrency",
+        "Throughput"
+      ]
     }
   ],
   "Frontend Developer": [
@@ -6623,6 +6743,126 @@
         "experimentation",
         "practical application",
         "selective adoption"
+      ]
+    },
+    {
+      "question": "Explain the concept of the Virtual DOM in React. How does it improve performance compared to direct DOM manipulation?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Reconciliation",
+        "Diffing algorithm",
+        "Batch updates",
+        "React Fiber",
+        "Render cycle"
+      ]
+    },
+    {
+      "question": "You are tasked with optimizing the load time of a large React application. What techniques and tools would you use?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Code splitting",
+        "Lazy loading",
+        "Tree shaking",
+        "Image optimization",
+        "Lighthouse"
+      ]
+    },
+    {
+      "question": "Describe the difference between server-side rendering (SSR), client-side rendering (CSR), and static site generation (SSG). When would you choose one over the others?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "SEO",
+        "Time to Interactive (TTI)",
+        "Next.js",
+        "Performance trade-offs",
+        "Dynamic content"
+      ]
+    },
+    {
+      "question": "How do you manage state in a complex application? Compare Redux, Context API, and other state management libraries you've used.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Global state",
+        "Prop drilling",
+        "Immutability",
+        "Boilerplate",
+        "Scalability"
+      ]
+    },
+    {
+      "question": "Explain the box model in CSS. How does `box-sizing: border-box` change the way element dimensions are calculated?",
+      "type": "Technical",
+      "difficulty": "Easy",
+      "keywords": [
+        "Content",
+        "Padding",
+        "Border",
+        "Margin",
+        "Layout predictability"
+      ]
+    },
+    {
+      "question": "What are accessibility (a11y) best practices you follow when building a user interface? How do you test for accessibility compliance?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Semantic HTML",
+        "ARIA roles",
+        "Keyboard navigation",
+        "Color contrast",
+        "Screen readers"
+      ]
+    },
+    {
+      "question": "Describe a challenging bug you encountered in a frontend application (e.g., a memory leak or race condition). How did you debug and fix it?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "Chrome DevTools",
+        "Debugging process",
+        "Root cause analysis",
+        "Performance profiling",
+        "Solution validation"
+      ]
+    },
+    {
+      "question": "Explain the concept of closures in JavaScript and provide a practical use case where they are beneficial.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Lexical scope",
+        "Data privacy",
+        "Currying",
+        "Event handlers",
+        "Variable retention"
+      ]
+    },
+    {
+      "question": "How do you ensure your frontend code is maintainable and scalable as the team grows?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Component architecture",
+        "Linting/Formatting",
+        "TypeScript",
+        "Documentation",
+        "Code reviews"
+      ]
+    },
+    {
+      "question": "What is the difference between `useEffect` and `useLayoutEffect` in React? When should you use one over the other?",
+      "type": "Technical",
+      "difficulty": "Hard",
+      "keywords": [
+        "Render cycle",
+        "DOM mutations",
+        "Visual flickering",
+        "Synchronous execution",
+        "Performance impact"
       ]
     }
   ],
@@ -7360,6 +7600,190 @@
         "Constructive feedback",
         "Empowerment",
         "Active listening"
+      ]
+    }
+  ],
+  "Social Media Analyst": [
+    {
+      "question": "You notice a sudden drop in engagement on a key social media campaign despite high reach. How do you investigate the cause and what metrics would you look at to diagnose the issue?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Click-through rate (CTR)",
+        "Sentiment analysis",
+        "Content relevance",
+        "Platform algorithms",
+        "Audience retention"
+      ]
+    },
+    {
+      "question": "Describe your process for creating a social media content calendar. How do you balance promotional content with engaging, value-driven posts?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "Content mix",
+        "80/20 rule",
+        "Audience persona",
+        "Scheduling tools",
+        "Consistency"
+      ]
+    },
+    {
+      "question": "A client wants to increase brand awareness on TikTok but has a limited budget. What strategy would you propose to maximize organic reach and engagement?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Trends",
+        "User-generated content (UGC)",
+        "Hashtag strategy",
+        "Short-form video",
+        "Community engagement"
+      ]
+    },
+    {
+      "question": "How do you measure ROI for social media activities? Which KPIs are most important for validatng broad marketing goals versus specific sales targets?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Conversion rate",
+        "Cost per acquisition (CPA)",
+        "Attribution models",
+        "KPI mapping",
+        "Customer Lifetime Value (CLV)"
+      ]
+    },
+    {
+      "question": "Tell me about a time you managed a social media crisis or negative PR event. How did you respond to the community?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "Crisis management",
+        "Transparency",
+        "Speed of response",
+        "Empathy",
+        "Brand reputation"
+      ]
+    },
+    {
+      "question": "Explain the difference between social listening and social monitoring. Give an example of how you would use social listening to inform a product strategy.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Sentiment tracking",
+        "Brand mentions",
+        "Competitor analysis",
+        "Trend identification",
+        "Customer feedback"
+      ]
+    },
+    {
+      "question": "Which social media analytics tools are you proficient in, and how have you used them to improve campaign performance?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Google Analytics",
+        "Sprout Social",
+        "Hootsuite",
+        "Meta Business Suite",
+        "Data visualization"
+      ]
+    },
+    {
+      "question": "How would you run an A/B test for a Facebook ad campaign? What variables would you test and how would you determine the winner?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Ad copy",
+        "Visuals",
+        "Audience targeting",
+        "Statistical significance",
+        "CTR/Conversion"
+      ]
+    },
+    {
+      "question": "Describe a successful influencer marketing campaign you managed or would propose. How do you select the right influencers and measure their impact?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "Micro-influencers",
+        "Engagement rate",
+        "Brand alignment",
+        "Authenticity",
+        "Performance tracking"
+      ]
+    },
+    {
+      "question": "With the decline of third-party cookies, how are you adapting your social media targeting and measurement strategies?",
+      "type": "Technical",
+      "difficulty": "Hard",
+      "keywords": [
+        "First-party data",
+        "Contextual targeting",
+        "Privacy compliance",
+        "Server-side tracking",
+        "Community building"
+      ]
+    }
+  ],
+  "Product Manager": [
+    {
+      "question": "How do you prioritize features for a product roadmap when stakeholders have conflicting requests?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "RICE score",
+        "Impact vs Effort",
+        "User value",
+        "Strategic alignment",
+        "Fierce prioritization"
+      ]
+    },
+    {
+      "question": "Describe a time you had to say 'no' to a feature request from a senior executive. How did you handle it?",
+      "type": "Behavioral",
+      "difficulty": "Medium",
+      "keywords": [
+        "Data-driven decision",
+        "Stakeholder management",
+        "Communication",
+        "Alternative solutions",
+        "Focus on goals"
+      ]
+    },
+    {
+      "question": "What metrics would you look at to evaluate the success of a new feature launch?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Adoption rate",
+        "Retention",
+        "User satisfaction (NPS/CSAT)",
+        "Business KPI impact",
+        "Usage frequency"
+      ]
+    },
+    {
+      "question": "How do you define a Minimum Viable Product (MVP)? Give an example of an MVP you defined or worked on.",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "Core value proposition",
+        "Speed to learning",
+        "Iterative development",
+        "Feature scoping",
+        "User feedback"
+      ]
+    },
+    {
+      "question": "Walk me through your process for conducting user research. How do you translate insights into product requirements?",
+      "type": "Technical",
+      "difficulty": "Medium",
+      "keywords": [
+        "User interviews",
+        "Surveys",
+        "User personas",
+        "User stories",
+        "Problem validation"
       ]
     }
   ]

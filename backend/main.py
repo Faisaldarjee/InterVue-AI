@@ -6,6 +6,7 @@ Smart interview generation with adaptive difficulty and learning insights
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 import os
 import uuid
@@ -209,6 +210,39 @@ async def upload_resume(
         logger.error(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/analyze-resume")
+async def analyze_resume_endpoint(file: UploadFile = File(...)):
+    """
+    Dedicated Resume Scorer Endpoint (Score + ATS + Magic Rewrite).
+    Uses One-Shot Prompt strategy via analyze_resume().
+    """
+    try:
+        logger.info(f"📄 Resume Scorer Upload: {file.filename}")
+        
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        content = await file.read()
+        resume_text = ResumeParser.parse_resume(content, file.filename)
+        
+        if not resume_text or len(resume_text) < 50:
+             raise HTTPException(status_code=400, detail="Could not extract text from file")
+             
+        # Call the new 3-in-1 Analysis
+        analysis = llm.analyze_resume(resume_text)
+        
+        return {
+            "status": "success", 
+            "filename": file.filename,
+            "analysis": analysis
+        }
+        
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Resume Scorer Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/start-rapid-fire")
 async def start_rapid_fire(
     request: RapidFireStartRequest
@@ -250,6 +284,7 @@ async def start_rapid_fire(
             "mode": "rapid_fire",
             "config": config,
             "first_question": questions[0] if questions else None,
+            "questions_list": questions, # ADDED: Required for Voice Mode (Offline)
             "total_questions": len(questions),
             "interview_tips": [
                 "Keep answers concise",
@@ -271,6 +306,51 @@ async def submit_rapid_fire_answer(session_id: str, user_ans: Answer):
     Rapid Fire specific submission endpoint to match frontend route
     """
     return await submit_answer(session_id, user_ans)
+
+class VoiceBatchRequest(BaseModel):
+    session_id: str
+    job_role: str
+    answers: list
+
+@app.post("/submit-voice-batch")
+async def submit_voice_batch(request: VoiceBatchRequest):
+    """
+    One-Shot Voice Interview Evaluation (1 API Call)
+    """
+    try:
+        logger.info(f"🎙️ Voice Batch Submission: {len(request.answers)} answers for {request.job_role}")
+        
+        # 1. Single API Call for Full Report
+        evaluation = llm.evaluate_interview_batch(request.answers, request.job_role)
+        
+        # 2. Update Analytics
+        analytics["questions_answered"] += len(request.answers)
+        analytics["interviews_completed"] += 1
+        
+        return {
+            "status": "completed",
+            "finalReport": {
+                "recommendation": evaluation["overall_report"]["rating"],
+                "overall_summary": evaluation["overall_report"]["summary"],
+                "estimated_interview_success_rate": f"{int(evaluation['overall_report']['average_score'] * 10)}%"
+            },
+            "summary": {
+                "average_score": evaluation["overall_report"]["average_score"],
+                "total_questions": len(request.answers),
+                "duration": "10 min", # Estimation
+                "estimated_readiness": evaluation["overall_report"]["rating"]
+            },
+            "learningReport": {
+                "overall_assessment": evaluation["overall_report"]["summary"],
+                "confidence_level": int(evaluation["overall_report"]["average_score"]),
+                "strengths_demonstrated": evaluation["overall_report"]["strengths"],
+                "areas_for_improvement": evaluation["overall_report"]["improvements"]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Voice Batch Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/submit-answer/{session_id}")
 async def submit_answer(session_id: str, user_ans: Answer):

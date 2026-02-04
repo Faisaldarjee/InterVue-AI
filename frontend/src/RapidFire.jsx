@@ -24,12 +24,12 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== RAPID FIRE START SCREEN ====================
-function RapidFireStart({ onStart, onBack }) {
+function RapidFireStart({ onStart, onBack, onStartVoice }) {
   const [jobRole, setJobRole] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleStart = async () => {
+  const handleStart = async (mode = 'text') => {
     if (!jobRole.trim()) {
       setError('Please enter a job role');
       return;
@@ -39,18 +39,27 @@ function RapidFireStart({ onStart, onBack }) {
     setError(null);
 
     try {
+      // We use the SAME endpoint to get questions, just route differently after
       const response = await axios.post(`${API_URL}/start-rapid-fire`, {
         job_role: jobRole,
         difficulty: "medium"
       }, { timeout: 60000 });
 
-      onStart({
+      const sessionData = {
         interviewId: response.data.interview_id,
         jobRole: jobRole,
         config: response.data.config,
         firstQuestion: response.data.first_question,
+        questions: response.data.questions_list || [], // Backend needs to send list for Voice Mode
         totalQuestions: 10
-      });
+      };
+
+      if (mode === 'voice') {
+        if (onStartVoice) onStartVoice(sessionData);
+      } else {
+        onStart(sessionData);
+      }
+
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to start rapid fire');
     } finally {
@@ -138,24 +147,35 @@ function RapidFireStart({ onStart, onBack }) {
               </ul>
             </div>
 
-            {/* Start Button */}
-            <button
-              onClick={handleStart}
-              disabled={loading || !jobRole.trim()}
-              className="w-full py-4 bg-gradient-to-r from-rose-600 to-orange-500 hover:from-rose-700 hover:to-orange-600 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group text-lg"
-            >
-              {loading ? (
-                <>
-                  <Loader size={24} className="animate-spin" />
-                  Generating Questions...
-                </>
-              ) : (
-                <>
-                  🔥 Start Rapid Fire Challenge
-                  <ArrowRight size={24} className="group-hover:translate-x-1 transition" />
-                </>
-              )}
-            </button>
+            {/* Start Buttons */}
+            <div className="space-y-4">
+              <button
+                onClick={() => handleStart('text')}
+                disabled={loading || !jobRole.trim()}
+                className="w-full py-4 bg-gradient-to-r from-rose-600 to-orange-500 hover:from-rose-700 hover:to-orange-600 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group text-lg shadow-lg shadow-rose-900/20"
+              >
+                {loading ? (
+                  <>
+                    <Loader size={24} className="animate-spin" />
+                    Generating Questions...
+                  </>
+                ) : (
+                  <>
+                    🔥 Start Rapid Fire (Text)
+                    <ArrowRight size={24} className="group-hover:translate-x-1 transition" />
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleStart('voice')}
+                disabled={loading || !jobRole.trim()}
+                className="w-full py-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 disabled:opacity-50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 group"
+              >
+                <div className="p-1 bg-red-500 rounded-full animate-pulse mr-2"></div>
+                🎙️ Start Voice Mode (Beta)
+              </button>
+            </div>
 
             <p className="text-center text-slate-400 text-xs">
               💡 Tip: Be specific with examples • Stay confident • Good luck!
@@ -366,10 +386,10 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
         {/* Feedback */}
         {feedback && (
           <div className={`mb-6 p-6 rounded-xl border-l-4 animate-in ${feedback.score >= 8
-              ? 'bg-green-500/10 border-l-green-500 text-green-300'
-              : feedback.score >= 6
-                ? 'bg-yellow-500/10 border-l-yellow-500 text-yellow-300'
-                : 'bg-orange-500/10 border-l-orange-500 text-orange-300'
+            ? 'bg-green-500/10 border-l-green-500 text-green-300'
+            : feedback.score >= 6
+              ? 'bg-yellow-500/10 border-l-yellow-500 text-yellow-300'
+              : 'bg-orange-500/10 border-l-orange-500 text-orange-300'
             }`}>
             {feedback.score > 0 && (
               <p className="text-3xl font-bold mb-2 flex items-center gap-2">
@@ -567,7 +587,7 @@ function RapidFireResults({ results, allAnswers, onNewInterview, onBack }) {
 }
 
 // ==================== MAIN RAPID FIRE COMPONENT ====================
-export default function RapidFire({ onBack }) {
+export default function RapidFire({ onBack, onStartVoice }) {
   const [stage, setStage] = useState('start'); // start, interview, results
   const [interviewData, setInterviewData] = useState(null);
   const [results, setResults] = useState(null);
@@ -595,7 +615,7 @@ export default function RapidFire({ onBack }) {
 
   return (
     <>
-      {stage === 'start' && <RapidFireStart onStart={handleStart} onBack={onBack} />}
+      {stage === 'start' && <RapidFireStart onStart={handleStart} onBack={onBack} onStartVoice={onStartVoice} />}
       {stage === 'interview' && interviewData && (
         <RapidFireInterview interviewData={interviewData} onAnswer={handleAnswer} onBack={() => setStage('start')} />
       )}
