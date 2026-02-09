@@ -52,6 +52,56 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
 
     const currentQuestion = questions[currentQuestionIndex];
 
+    const [preferredVoice, setPreferredVoice] = useState(null);
+
+    // Load voices and select a female voice
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                // Priority list for clear female voices
+                const voicePriorities = [
+                    "Google US English", // Often very clear
+                    "Microsoft Zira",    // Windows default female
+                    "Samantha",          // macOS default female
+                ];
+
+                let selected = null;
+
+                // 1. Try exact matches from priority list
+                for (const name of voicePriorities) {
+                    selected = voices.find(v => v.name.includes(name));
+                    if (selected) break;
+                }
+
+                // 2. If not found, try any English female voice
+                if (!selected) {
+                    selected = voices.find(v =>
+                        v.lang.startsWith('en') &&
+                        (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('susan'))
+                    );
+                }
+
+                // 3. Fallback to any English voice
+                if (!selected) {
+                    selected = voices.find(v => v.lang.startsWith('en'));
+                }
+
+                if (selected) {
+                    console.log("Selected Voice:", selected.name);
+                    setPreferredVoice(selected);
+                }
+            }
+        };
+
+        loadVoices();
+
+        // Chrome loads voices asynchronously
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, []);
+
     // ==================== SPEECH LOGIC ====================
     useEffect(() => {
         if ('webkitSpeechRecognition' in window) {
@@ -138,18 +188,26 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
     // Auto-Speak Question logic
     useEffect(() => {
         if (currentQuestion) {
-            const timer = setTimeout(() => speakText(currentQuestion.question), 600);
+            // Slight delay to ensure voice is loaded if it's the very first question
+            const timer = setTimeout(() => speakText(currentQuestion.question), 800);
             return () => clearTimeout(timer);
         }
-    }, [currentQuestionIndex]);
+    }, [currentQuestionIndex, preferredVoice]); // Added preferredVoice dependency
 
     const speakText = (text) => {
         if (!synthesisRef.current) return;
         synthesisRef.current.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+
+        // Slightly faster rate for "Rapid Fire" feel, but not too fast
+        utterance.rate = 1.1;
+        utterance.pitch = 1.05; // Slightly higher pitch often sounds clearer/more feminine if generic
+
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => setIsSpeaking(false);
         synthesisRef.current.speak(utterance);
@@ -316,8 +374,8 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
                     <button
                         onClick={toggleListening}
                         className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 shadow-2xl border-4 ${isListening
-                                ? 'bg-rose-600 border-rose-500 hover:bg-rose-500 scale-110'
-                                : 'bg-indigo-600 border-indigo-500 hover:bg-indigo-500 hover:scale-105'
+                            ? 'bg-rose-600 border-rose-500 hover:bg-rose-500 scale-110'
+                            : 'bg-indigo-600 border-indigo-500 hover:bg-indigo-500 hover:scale-105'
                             }`}
                     >
                         {isListening ? (
@@ -333,8 +391,8 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
                         onClick={handleNext}
                         disabled={!displayTranscript.trim()}
                         className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-white transition-all duration-300 shadow-lg ${displayTranscript.trim()
-                                ? 'bg-slate-800 hover:bg-white hover:text-slate-900 border border-slate-700 hover:border-white translate-x-0 opacity-100'
-                                : 'bg-slate-800/50 text-slate-600 border border-slate-800 cursor-not-allowed translate-x-4 opacity-0'
+                            ? 'bg-slate-800 hover:bg-white hover:text-slate-900 border border-slate-700 hover:border-white translate-x-0 opacity-100'
+                            : 'bg-slate-800/50 text-slate-600 border border-slate-800 cursor-not-allowed translate-x-4 opacity-0'
                             }`}
                     >
                         Next <ArrowRight size={20} />
