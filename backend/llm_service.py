@@ -205,7 +205,9 @@ Topics: {topics_str}
 Difficulty: {difficulty}
 
 Return ONLY a JSON array with no markdown, no code blocks. Each question must have this structure:
-[{{"question": "the question text", "type": "Technical", "difficulty": "{difficulty}", "why_asked": "why this matters", "sample_answer_points": ["point1", "point2"], "key_topic": "topic"}}]
+[{{"question": "the question text", "type": "Technical", "difficulty": "{difficulty}", "why_asked": "why this matters", "sample_answer_points": ["point1", "point2"], "key_topic": "topic", "requires_code": false}}]
+
+Note: Set "requires_code" to true ONLY if the user is expected to write logic, functions, or actual code to answer the question.
 
 Generate {num_questions} valid questions. Return ONLY the JSON array, nothing else."""
 
@@ -228,6 +230,7 @@ Generate {num_questions} valid questions. Return ONLY the JSON array, nothing el
                     q['why_asked'] = q.get('why_asked', 'To assess your experience')
                     q['sample_answer_points'] = q.get('sample_answer_points', ['Experience', 'Skills'])
                     q['key_topic'] = q.get('key_topic', 'General')
+                    q['requires_code'] = bool(q.get('requires_code', False))
                     questions.append(q)
             
             if not questions:
@@ -253,10 +256,10 @@ Generate {num_questions} valid questions. Return ONLY the JSON array, nothing el
 
     def _default_questions(self, num_questions: int, job_role: str) -> list:
         base_questions = [
-            {"question": f"Tell us about your experience as a {job_role}.", "type": "Behavioral", "difficulty": "Medium", "why_asked": "To understand your background and experience", "sample_answer_points": ["Years of experience", "Key projects", "Technologies used"], "key_topic": "Experience"},
-            {"question": f"What's your strongest skill related to {job_role}?", "type": "General", "difficulty": "Easy", "why_asked": "To identify your core competencies", "sample_answer_points": ["Specific skill", "How developed it", "Examples"], "key_topic": "Skills"},
-            {"question": "Describe a challenging problem you solved at work.", "type": "Technical", "difficulty": "Medium", "why_asked": "To see your problem-solving approach", "sample_answer_points": ["Problem description", "Your approach", "Final solution"], "key_topic": "Problem Solving"},
-            {"question": "How do you stay updated with latest technologies?", "type": "Behavioral", "difficulty": "Easy", "why_asked": "To assess your learning mindset", "sample_answer_points": ["Learning methods", "Recent learnings", "Certifications"], "key_topic": "Learning"}
+            {"question": f"Tell us about your experience as a {job_role}.", "type": "Behavioral", "difficulty": "Medium", "why_asked": "To understand your background and experience", "sample_answer_points": ["Years of experience", "Key projects", "Technologies used"], "key_topic": "Experience", "requires_code": False},
+            {"question": f"What's your strongest skill related to {job_role}?", "type": "General", "difficulty": "Easy", "why_asked": "To identify your core competencies", "sample_answer_points": ["Specific skill", "How developed it", "Examples"], "key_topic": "Skills", "requires_code": False},
+            {"question": "Write a small function to demonstrate your problem solving.", "type": "Technical", "difficulty": "Medium", "why_asked": "To see your problem-solving approach in code", "sample_answer_points": ["Problem description", "Your approach", "Final solution"], "key_topic": "Problem Solving", "requires_code": True},
+            {"question": "How do you stay updated with latest technologies?", "type": "Behavioral", "difficulty": "Easy", "why_asked": "To assess your learning mindset", "sample_answer_points": ["Learning methods", "Recent learnings", "Certifications"], "key_topic": "Learning", "requires_code": False}
         ]
         return base_questions[:num_questions]
 

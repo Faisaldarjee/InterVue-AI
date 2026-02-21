@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Send, Loader, CheckCircle, AlertCircle,
   Award, Clock, ArrowRight, Zap, Brain,
-  BookOpen, Lightbulb, Target, BarChart3, Eye
+  BookOpen, Lightbulb, Target, BarChart3, Eye,
+  Mic, MicOff, Code
 } from 'lucide-react';
 import axios from 'axios';
+import Editor from 'react-simple-code-editor';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-python';
+import 'prismjs/themes/prism-tomorrow.css';
 import RapidFire from './RapidFire';
 import VoiceInterview from './VoiceInterview';
 import ResumeUpload from './ResumeUpload';
@@ -348,6 +355,106 @@ function InterviewPage({ sessionId, firstQuestion, totalQuestions, jobRole, inte
   const [answersData, setAnswersData] = useState([]);
   const [progress, setProgress] = useState({ current: 1, total: totalQuestions });
 
+  // Voice Dictation States
+  const [isListening, setIsListening] = useState(false);
+  const [micStatus, setMicStatus] = useState('Off');
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const recognitionRef = useRef(null);
+
+  // Use a ref to track if we should deliberately be listening
+  const shouldListenRef = useRef(false);
+
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window) {
+      const recognition = new window.webkitSpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setMicStatus('Listening...');
+        setInterimTranscript('');
+      };
+
+      recognition.onresult = (event) => {
+        let final = '';
+        let interim = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            final += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+
+        if (final) {
+          setAnswer(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + final + ' ');
+        }
+        setInterimTranscript(interim);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === 'not-allowed') {
+          setMicStatus('Permission Denied');
+          shouldListenRef.current = false;
+          setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        setInterimTranscript('');
+        // Auto-restart if it was prematurely cut off by the browser (common issue on localhost)
+        if (shouldListenRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.error("Failed to restart mic", e);
+            shouldListenRef.current = false;
+            setIsListening(false);
+            setMicStatus('Error');
+          }
+        } else {
+          setIsListening(false);
+          setMicStatus('Off');
+        }
+      };
+
+      recognitionRef.current = recognition;
+    } else {
+      setMicStatus('Not Supported');
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        shouldListenRef.current = false;
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleMic = () => {
+    if (!recognitionRef.current) {
+      alert("Microphone dictation is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      shouldListenRef.current = false;
+      recognitionRef.current.stop();
+      setIsListening(false);
+      setMicStatus('Off');
+    } else {
+      try {
+        shouldListenRef.current = true;
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (e) {
+        console.error("Start error:", e);
+      }
+    }
+  };
+
   log('Interview page initialized', { sessionId, firstQuestion, totalQuestions });
 
   const handleSubmit = async () => {
@@ -489,15 +596,54 @@ function InterviewPage({ sessionId, firstQuestion, totalQuestions, jobRole, inte
         )}
 
         {/* Answer Input */}
-        <div className="space-y-4 mb-6">
-          <textarea
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your answer here... Be specific with examples"
-            rows="7"
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-xl px-4 py-4 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none"
-          />
-          <div className="flex justify-between items-center text-sm">
+        <div className="space-y-4 mb-6 relative">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              {currentQuestion?.requires_code ? <><Code size={18} className="text-blue-400" /> Code Solution</> : 'Your Answer'}
+            </h3>
+            {!currentQuestion?.requires_code && (
+              <div className="flex items-center gap-3">
+                {isListening && <span className="text-cyan-400 text-xs animate-pulse font-medium">{micStatus}</span>}
+                <button
+                  onClick={toggleMic}
+                  className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-semibold transition ${isListening ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_15px_rgba(34,211,238,0.3)] animate-pulse' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+                >
+                  {isListening ? <Mic size={16} /> : <MicOff size={16} />}
+                  {isListening ? 'Stop' : 'Dictate Answer'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {currentQuestion?.requires_code ? (
+            <div className="w-full bg-[#1e1e1e] border border-slate-600 rounded-xl overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition">
+              <Editor
+                value={answer}
+                onValueChange={code => setAnswer(code)}
+                highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                padding={16}
+                style={{
+                  fontFamily: '"Fira Code", "Fira Mono", monospace',
+                  fontSize: 15,
+                  color: '#fff',
+                  minHeight: '200px'
+                }}
+                className="focus:outline-none placeholder-slate-500"
+                placeholder="// Write your code/logic here..."
+              />
+            </div>
+          ) : (
+            <textarea
+              value={answer + (interimTranscript ? (answer && !answer.endsWith(' ') ? ' ' : '') + interimTranscript : '')}
+              onChange={(e) => setAnswer(e.target.value)}
+              readOnly={isListening}
+              placeholder="Type or dictate your answer here... Be specific with examples"
+              rows="7"
+              className={`w-full bg-slate-700/50 border ${isListening ? 'border-cyan-500/50 shadow-[0_0_15px_rgba(34,211,238,0.1)]' : 'border-slate-600 focus:border-blue-500'} rounded-xl px-4 py-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none`}
+            />
+          )}
+
+          <div className="flex justify-between items-center text-sm mt-2">
             <p className="text-slate-400">{answer.length} characters</p>
             <p className={answer.length < 30 ? 'text-slate-500' : 'text-green-400'}>
               {answer.length < 30 ? 'Add more detail' : '✓ Good length'}
