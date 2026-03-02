@@ -46,12 +46,13 @@ class RapidFireMode:
     def get_config(self) -> Dict:
         return self.config
 
-    def generate_rapid_fire_questions(self, llm_service, job_role: str) -> List[Dict]:
+    def generate_rapid_fire_questions(self, llm_service, job_role: str, num_questions: int = 10) -> List[Dict]:
         """
-        Get 10 unique questions for the role from offline DB.
+        Get N unique questions for the role from offline DB.
         'llm_service' arg is kept for compatibility but ignored.
         """
-        logger.info(f"🔥 Generating offline questions for: {job_role}")
+        num_questions = max(3, min(num_questions, 20))  # Clamp 3-20
+        logger.info(f"🔥 Generating {num_questions} offline questions for: {job_role}")
         
         # 1. Exact Match
         if job_role in self.questions_db:
@@ -72,17 +73,17 @@ class RapidFireMode:
                 logger.warning(f"⚠️ No specific questions for '{job_role}'. Using General mix.")
                 candidates = self.questions_db.get("General", [])
 
-        # Select 10 random unique questions
-        if len(candidates) >= 10:
-            selected = random.sample(candidates, 10)
+        # Select N random unique questions
+        if len(candidates) >= num_questions:
+            selected = random.sample(candidates, num_questions)
         else:
             # If not enough specific questions, fill with General
-            logger.info(f"⚠️ Not enough questions for '{job_role}' ({len(candidates)}/10). Filling with General.")
+            logger.info(f"⚠️ Not enough questions for '{job_role}' ({len(candidates)}/{num_questions}). Filling with General.")
             selected = list(candidates) # Copy all specific
             
             # Get General questions to fill the gap
             general_pool = self.questions_db.get("General", [])
-            needed = 10 - len(selected)
+            needed = num_questions - len(selected)
             
             if len(general_pool) >= needed:
                 # Add unique general questions
@@ -90,7 +91,7 @@ class RapidFireMode:
             else:
                 # If still not enough (very rare), then duplicate
                 selected.extend(general_pool)
-                while len(selected) < 10:
+                while len(selected) < num_questions:
                      selected.append(random.choice(selected)) # Fallback to duplicates
             
             random.shuffle(selected)

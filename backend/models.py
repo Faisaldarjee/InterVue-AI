@@ -76,3 +76,4 @@ class RapidFireStartRequest(BaseModel):
     """Request model for starting rapid fire"""
     job_role: str
     difficulty: str = "medium"
+    num_questions: int = 10

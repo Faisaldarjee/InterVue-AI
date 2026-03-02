@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, Loader, AlertCircle, CheckCircle, BarChart3, Clock, Zap, Eye, Flame, Target, Award } from 'lucide-react';
 import axios from 'axios';
+import { saveInterview } from './utils/historyManager';
+import { saveInterviewToDB } from './utils/apiClient';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 
 // ==================== NOTIFICATION ====================
 function Notification({ message, type, onClose }) {
@@ -28,6 +31,7 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
   const [jobRole, setJobRole] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [questionCount, setQuestionCount] = useState(10);
 
   const handleStart = async (mode = 'text') => {
     if (!jobRole.trim()) {
@@ -42,7 +46,8 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
       // We use the SAME endpoint to get questions, just route differently after
       const response = await axios.post(`${API_URL}/start-rapid-fire`, {
         job_role: jobRole,
-        difficulty: "medium"
+        difficulty: "medium",
+        num_questions: questionCount
       }, { timeout: 60000 });
 
       const sessionData = {
@@ -51,7 +56,7 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
         config: response.data.config,
         firstQuestion: response.data.first_question,
         questions: response.data.questions_list || [], // Backend needs to send list for Voice Mode
-        totalQuestions: 10
+        totalQuestions: questionCount
       };
 
       if (mode === 'voice') {
@@ -78,10 +83,10 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
 
       <div className="relative z-10">
         {/* Back Button */}
-        <div className="pt-6 px-6">
+        <div className="pt-2 px-6">
           <button
             onClick={onBack}
-            className="text-slate-400 hover:text-white transition flex items-center gap-2 mb-12"
+            className="text-slate-400 hover:text-white transition flex items-center gap-2 mb-8"
           >
             ← Back to Home
           </button>
@@ -98,7 +103,7 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
             🔥 Rapid Fire
           </h1>
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            10 adaptive questions • 60 seconds each • Real interview simulation • Live scoring
+            {questionCount} adaptive questions • 60 seconds each • Real interview simulation • Live scoring
           </p>
         </div>
 
@@ -109,7 +114,7 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center p-4 bg-rose-500/10 rounded-lg border border-rose-500/20">
                 <div className="text-2xl mb-2">⚡</div>
-                <div className="text-xs font-semibold text-rose-300">10 Questions</div>
+                <div className="text-xs font-semibold text-rose-300">{questionCount} Questions</div>
               </div>
               <div className="text-center p-4 bg-orange-500/10 rounded-lg border border-orange-500/20">
                 <div className="text-2xl mb-2">⏱️</div>
@@ -119,6 +124,30 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
                 <div className="text-2xl mb-2">🎯</div>
                 <div className="text-xs font-semibold text-red-300">Adaptive</div>
               </div>
+            </div>
+
+            {/* Question Count Selector */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-3">
+                🎯 How many questions?
+              </label>
+              <div className="flex gap-2">
+                {[5, 7, 10, 15].map(count => (
+                  <button
+                    key={count}
+                    onClick={() => setQuestionCount(count)}
+                    className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all border ${questionCount === count
+                        ? 'bg-gradient-to-r from-rose-600 to-orange-500 text-white border-rose-400 shadow-lg shadow-rose-900/30 scale-105'
+                        : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:border-rose-500/50 hover:text-white'
+                      }`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+              <p className="text-slate-500 text-xs mt-2 text-center">
+                {questionCount <= 5 ? '⚡ Quick practice' : questionCount <= 7 ? '🎯 Balanced round' : questionCount <= 10 ? '🔥 Full challenge' : '💪 Extended marathon'}
+              </p>
             </div>
 
             {/* Job Role Input */}
@@ -603,6 +632,25 @@ export default function RapidFire({ onBack, onStartVoice }) {
       setResults(response.results);
       setAllAnswers(response.allAnswers);
       setStage('results');
+
+      // Save to local history
+      saveInterview({
+        mode: 'rapid-fire',
+        jobRole: interviewData?.jobRole || 'Unknown',
+        score: response.results?.average_score || 0,
+        questionsCount: response.results?.total_questions || 10,
+      });
+
+      // Save to Supabase DB
+      saveInterviewToDB({
+        mode: 'rapid-fire',
+        job_role: interviewData?.jobRole || 'Unknown',
+        score: response.results?.average_score || 0,
+        final_report: response.results || {},
+        questions: [],
+        answers: [],
+        duration_seconds: Math.round(response.results?.total_time_seconds || 0),
+      });
     }
   };
 

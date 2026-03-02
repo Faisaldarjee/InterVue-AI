@@ -4,7 +4,7 @@ InterVue AI - Enhanced Backend
 Smart interview generation with adaptive difficulty and learning insights
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
@@ -20,6 +20,14 @@ from llm_service import EnhancedLLMService
 from resume_parser import ResumeParser
 from rapid_fire_mode import RapidFireMode
 from models import Answer, InterviewSession, RapidFireStartRequest
+from auth import get_current_user, get_optional_user
+from database import (
+    get_profile, save_interview as db_save_interview,
+    get_user_interviews, get_user_stats, save_resume as db_save_resume,
+    get_user_resumes, upload_resume_file, save_questions_to_bank,
+    get_question_bank_count
+)
+from learning import get_full_learning_data
 
 load_dotenv()
 
@@ -106,7 +114,8 @@ async def health_check():
 async def upload_resume(
     file: UploadFile = File(...),
     job_description: str = Form(""),
-    job_role: str = Form("General")
+    job_role: str = Form("General"),
+    user: dict = Depends(get_optional_user)
 ):
     """
     Upload resume and start smart interview
@@ -164,6 +173,12 @@ async def upload_resume(
                 "key_topic": "Experience"
             }]
         
+        # Save generated questions to question bank
+        try:
+            save_questions_to_bank(job_role, questions)
+        except Exception as qe:
+            logger.error(f"⚠️ Question bank save error: {qe}")
+        
         # Create session
         session_id = str(uuid.uuid4())
         sessions[session_id] = InterviewSession(
@@ -180,6 +195,19 @@ async def upload_resume(
         
         analytics["total_sessions"] += 1
         analytics["total_candidates"] += 1
+        
+        # Save resume to DB if user is authenticated
+        if user:
+            try:
+                db_save_resume(
+                    user_id=user['id'],
+                    file_name=file.filename,
+                    parsed_text=resume_text[:5000],
+                    analysis=analysis,
+                )
+                logger.info(f"✅ Resume saved to DB for user {user['id']}")
+            except Exception as db_err:
+                logger.error(f"⚠️ Failed to save resume to DB: {db_err}")
         
         logger.info(f"✅ Session created: {num_questions} questions, {difficulty} difficulty")
         
@@ -211,7 +239,10 @@ async def upload_resume(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze-resume")
-async def analyze_resume_endpoint(file: UploadFile = File(...)):
+async def analyze_resume_endpoint(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_optional_user)
+):
     """
     Dedicated Resume Scorer Endpoint (Score + ATS + Magic Rewrite).
     Uses One-Shot Prompt strategy via analyze_resume().
@@ -230,6 +261,19 @@ async def analyze_resume_endpoint(file: UploadFile = File(...)):
              
         # Call the new 3-in-1 Analysis
         analysis = llm.analyze_resume(resume_text)
+        
+        # Save to DB if user is authenticated
+        if user:
+            try:
+                db_save_resume(
+                    user_id=user['id'],
+                    file_name=file.filename,
+                    parsed_text=resume_text[:5000],  # Limit text size
+                    analysis=analysis,
+                )
+                logger.info(f"✅ Resume saved to DB for user {user['id']}")
+            except Exception as db_err:
+                logger.error(f"⚠️ Failed to save resume to DB: {db_err}")
         
         return {
             "status": "success", 
@@ -257,8 +301,15 @@ async def start_rapid_fire(
             raise HTTPException(status_code=503, detail="Rapid Fire service unavailable")
         
         # Generate questions
-        questions = rapid_fire.generate_rapid_fire_questions(llm, request.job_role)
+        num_q = max(3, min(request.num_questions, 20))
+        questions = rapid_fire.generate_rapid_fire_questions(llm, request.job_role, num_q)
         config = rapid_fire.get_config()
+        
+        # Save generated questions to question bank
+        try:
+            save_questions_to_bank(request.job_role, questions)
+        except Exception as qe:
+            logger.error(f"⚠️ Question bank save error: {qe}")
         
         # Create session
         session_id = str(uuid.uuid4())
@@ -561,6 +612,110 @@ async def get_analytics():
             "platform_rating": f"{analytics['average_score']:.1f}/10" if analytics['completed_interviews'] > 0 else "N/A"
         }
     }
+
+# ==================== USER API ENDPOINTS ====================
+
+@app.get("/api/user/profile")
+async def get_user_profile(user: dict = Depends(get_current_user)):
+    """Get current user's profile"""
+    try:
+        profile = get_profile(user['id'])
+        return {
+            "status": "success",
+            "profile": profile,
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "name": user['name'],
+                "avatar": user['avatar'],
+            }
+        }
+    except Exception as e:
+        logger.error(f"Profile error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/stats")
+async def get_user_stats_endpoint(user: dict = Depends(get_current_user)):
+    """Get user's aggregated statistics for dashboard"""
+    try:
+        stats = get_user_stats(user['id'])
+        return {"status": "success", "stats": stats}
+    except Exception as e:
+        logger.error(f"Stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/interviews")
+async def get_user_interviews_endpoint(
+    limit: int = 50,
+    user: dict = Depends(get_current_user)
+):
+    """Get user's interview history"""
+    try:
+        interviews = get_user_interviews(user['id'], limit)
+        return {"status": "success", "interviews": interviews}
+    except Exception as e:
+        logger.error(f"Interviews error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SaveInterviewRequest(BaseModel):
+    mode: str = "standard"
+    job_role: str = ""
+    job_description: str = ""
+    questions: list = []
+    answers: list = []
+    score: float = 0
+    final_report: dict = {}
+    learning_report: dict = {}
+    duration_seconds: int = 0
+    resume_id: Optional[str] = None
+
+
+@app.post("/api/user/save-interview")
+async def save_user_interview(
+    request: SaveInterviewRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Save a completed interview to user's history"""
+    try:
+        result = db_save_interview(user['id'], request.dict())
+        if result:
+            return {"status": "success", "interview": result}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save interview")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Save interview error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/resumes")
+async def get_user_resumes_endpoint(user: dict = Depends(get_current_user)):
+    """Get user's saved resumes"""
+    try:
+        resumes = get_user_resumes(user['id'])
+        return {"status": "success", "resumes": resumes}
+    except Exception as e:
+        logger.error(f"Resumes error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/user/learning")
+async def get_user_learning_endpoint(user: dict = Depends(get_current_user)):
+    """Get personalized learning data for dashboard"""
+    try:
+        interviews = get_user_interviews(user['id'], limit=100)
+        resumes = get_user_resumes(user['id'])
+        qb_count = get_question_bank_count()
+        
+        learning_data = get_full_learning_data(interviews, resumes, qb_count)
+        return {"status": "success", **learning_data}
+    except Exception as e:
+        logger.error(f"Learning data error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==================== ERROR HANDLERS ====================
 

@@ -1,8 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader, ArrowRight } from 'lucide-react';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import apiClient from './utils/apiClient';
 
 export default function ResumeUpload({ onAnalysisComplete }) {
     const [dragActive, setDragActive] = useState(false);
@@ -61,7 +59,7 @@ export default function ResumeUpload({ onAnalysisComplete }) {
         formData.append('file', file);
 
         try {
-            const response = await axios.post(`${API_URL}/analyze-resume`, formData, {
+            const response = await apiClient.post('/analyze-resume', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 

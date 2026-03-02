@@ -3,8 +3,9 @@ import {
   Upload, Send, Loader, CheckCircle, AlertCircle,
   Award, Clock, ArrowRight, Zap, Brain,
   BookOpen, Lightbulb, Target, BarChart3, Eye,
-  Mic, MicOff, Code
+  Mic, MicOff, Code, History, LogOut, User
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import Editor from 'react-simple-code-editor';
 import Prism from 'prismjs';
@@ -16,6 +17,14 @@ import RapidFire from './RapidFire';
 import VoiceInterview from './VoiceInterview';
 import ResumeUpload from './ResumeUpload';
 import ResumeReport from './ResumeReport';
+import GlassCard from './components/GlassCard';
+import { InterviewSkeleton, ResultsSkeleton } from './components/SkeletonLoader';
+import HistoryDashboard from './components/HistoryDashboard';
+import AuthPages from './components/AuthPages';
+import { staggerContainer, staggerItem } from './components/PageTransition';
+import { saveInterview, getStats, setCurrentUser } from './utils/historyManager';
+import { supabase, signOut, getAccessToken, onAuthStateChange } from './utils/supabaseClient';
+import apiClient, { saveInterviewToDB } from './utils/apiClient';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -44,7 +53,7 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== LANDING PAGE ====================
-function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }) {
+function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, onStartHistory }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobRole, setJobRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -103,7 +112,7 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }
 
       log('Uploading resume', { file: resumeFile.name, jobRole, jobDescription: jobDescription.substring(0, 50) + '...' });
 
-      const response = await axios.post(`${API_URL}/upload-resume`, formData, {
+      const response = await apiClient.post('/upload-resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000
       });
@@ -140,6 +149,8 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }
     }
   };
 
+  const historyStats = getStats();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 overflow-hidden">
       {/* Animated Background */}
@@ -150,7 +161,12 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }
 
       <div className="relative z-10">
         {/* Header */}
-        <div className="text-center pt-16 pb-12">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center pt-4 pb-12"
+        >
           <div className="inline-block mb-6 px-4 py-2 bg-blue-500/20 border border-blue-500/40 rounded-full backdrop-blur">
             <span className="text-blue-300 text-sm font-semibold flex items-center gap-2">
               <Brain size={16} /> Smart Interview Prep
@@ -162,27 +178,57 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer }
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
             Personalized interview prep with AI-generated questions, real-time feedback, and confidence-building insights
           </p>
-        </div>
+
+          {/* Quick Stats Banner */}
+          {historyStats.totalInterviews > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+              className="mt-6 inline-flex items-center gap-4 px-5 py-2 bg-white/5 border border-white/10 rounded-full backdrop-blur text-sm"
+            >
+              <span className="text-slate-400">🎯 {historyStats.totalInterviews} interviews</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-yellow-400">⭐ Avg: {historyStats.averageScore}/10</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-orange-400">🔥 {historyStats.streakDays}d streak</span>
+            </motion.div>
+          )}
+        </motion.div>
 
         {/* Features Grid */}
         <div className="max-w-5xl mx-auto px-4 mb-16">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12"
+          >
             {[
-              { icon: Brain, label: 'Smart Questions', desc: '3-6 adaptive questions' },
-              { icon: Lightbulb, label: 'Real Tips', desc: 'Actionable interview tips' },
-              { icon: BookOpen, label: 'Learn', desc: 'Confidence building' },
-              { icon: Target, label: 'Focused', desc: 'Job-specific prep' }
+              { icon: Brain, label: 'Smart Questions', desc: '3-6 adaptive questions', color: 'blue' },
+              { icon: Lightbulb, label: 'Real Tips', desc: 'Actionable interview tips', color: 'amber' },
+              { icon: BookOpen, label: 'Learn', desc: 'Confidence building', color: 'green' },
+              { icon: Target, label: 'Focused', desc: 'Job-specific prep', color: 'purple' },
+              { icon: History, label: 'History', desc: `${historyStats.totalInterviews} sessions`, color: 'cyan', action: 'history' }
             ].map((feature, idx) => (
-              <div
-                key={idx}
-                className="group p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/50 rounded-lg transition-all"
-              >
-                <feature.icon size={28} className="text-blue-400 mb-3" />
-                <h3 className="text-white font-semibold text-sm mb-1">{feature.label}</h3>
-                <p className="text-slate-400 text-xs">{feature.desc}</p>
-              </div>
+              <motion.div key={idx} variants={staggerItem}>
+                <GlassCard
+                  glowColor={feature.color}
+                  hoverEffect={true}
+                  onClick={feature.action === 'history' ? onStartHistory : undefined}
+                  style={{ padding: '16px', cursor: feature.action ? 'pointer' : 'default' }}
+                >
+                  <feature.icon size={28} className={`mb-3 ${feature.color === 'blue' ? 'text-blue-400' :
+                    feature.color === 'amber' ? 'text-amber-400' :
+                      feature.color === 'green' ? 'text-green-400' :
+                        feature.color === 'purple' ? 'text-purple-400' : 'text-cyan-400'
+                    }`} />
+                  <h3 className="text-white font-semibold text-sm mb-1">{feature.label}</h3>
+                  <p className="text-slate-400 text-xs">{feature.desc}</p>
+                </GlassCard>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
 
           {/* Form Container */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -840,12 +886,112 @@ function ResultsPage({ data, onNewInterview }) {
   );
 }
 
+// ==================== PAGE TRANSITION WRAPPER ====================
+const pageVariants = {
+  initial: { opacity: 0, y: 20, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  exit: { opacity: 0, y: -15, scale: 0.98, transition: { duration: 0.25, ease: 'easeInOut' } },
+};
+
+// ==================== USER NAVBAR ====================
+function UserNavbar({ user, onLogout }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Brain size={20} className="text-blue-400" />
+          <span className="text-white font-bold text-sm">InterVue AI</span>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition"
+          >
+            {avatar ? (
+              <img src={avatar} alt="" className="w-6 h-6 rounded-full" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-blue-500/30 flex items-center justify-center">
+                <User size={14} className="text-blue-300" />
+              </div>
+            )}
+            <span className="text-white text-sm font-medium max-w-[120px] truncate">{displayName}</span>
+          </button>
+
+          {showMenu && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute right-0 top-12 w-48 py-2 rounded-xl border border-white/10 shadow-xl"
+              style={{ background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(20px)' }}
+            >
+              <div className="px-4 py-2 border-b border-white/5">
+                <p className="text-white text-sm font-semibold truncate">{displayName}</p>
+                <p className="text-slate-500 text-xs truncate">{user?.email}</p>
+              </div>
+              <button
+                onClick={() => { setShowMenu(false); onLogout(); }}
+                className="w-full px-4 py-2.5 text-left text-red-400 hover:bg-white/5 transition flex items-center gap-2 text-sm"
+              >
+                <LogOut size={16} />
+                Sign Out
+              </button>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ==================== MAIN APP ====================
 export default function App() {
   const [page, setPage] = useState('landing');
   const [interviewSession, setInterviewSession] = useState(null);
-  const [resumeAnalysis, setResumeAnalysis] = useState(null); // New State for Resume Report
+  const [resumeAnalysis, setResumeAnalysis] = useState(null);
 
+  // ===== AUTH STATE =====
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user?.id) setCurrentUser(session.user.id);
+      setAuthLoading(false);
+    });
+
+    // Listen for auth changes (login, logout, token refresh)
+    const { data: { subscription } } = onAuthStateChange((event, session) => {
+      log('Auth event', event);
+      setSession(session);
+      if (session?.user?.id) setCurrentUser(session.user.id);
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setPage('landing');
+        setInterviewSession(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleAuthSuccess = (session) => {
+    setSession(session);
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    setSession(null);
+    setPage('landing');
+    setInterviewSession(null);
+  };
+
+  // ===== PAGE HANDLERS =====
   const handleStartInterview = (data) => {
     log('handleStartInterview called', data);
     setInterviewSession(data);
@@ -856,6 +1002,30 @@ export default function App() {
     log('handleAnswer called', response);
 
     if (response.isComplete) {
+      // Save to local history
+      const avgScore = response.summary?.average_score || 0;
+      const parsedScore = typeof avgScore === 'string' ? parseFloat(avgScore) : avgScore;
+      saveInterview({
+        mode: 'standard',
+        jobRole: interviewSession?.jobRole || 'Unknown',
+        score: parsedScore,
+        questionsCount: response.summary?.total_questions || 0,
+        readiness: response.summary?.estimated_readiness || '',
+      });
+
+      // Save to Supabase DB
+      saveInterviewToDB({
+        mode: 'standard',
+        job_role: interviewSession?.jobRole || 'Unknown',
+        job_description: interviewSession?.jobDescription || '',
+        score: parsedScore,
+        final_report: response.finalReport || {},
+        learning_report: response.learningReport || {},
+        questions: [],
+        answers: [],
+        duration_seconds: 0,
+      });
+
       setPage('results');
       setInterviewSession({
         ...interviewSession,
@@ -869,7 +1039,6 @@ export default function App() {
     setInterviewSession(null);
   };
 
-  // ADD THESE TWO FUNCTIONS:
   const handleStartRapidFire = () => {
     setPage('rapid-fire');
   };
@@ -892,59 +1061,133 @@ export default function App() {
     setPage('resume-report');
   };
 
+  const handleStartHistory = () => {
+    setPage('history');
+  };
+
+  // ===== AUTH LOADING =====
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <Loader size={40} className="text-blue-400 mx-auto mb-4 animate-spin" />
+          <p className="text-slate-400">Loading InterVue AI...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ===== NOT AUTHENTICATED — SHOW AUTH PAGES =====
+  if (!session) {
+    return <AuthPages onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // ===== AUTHENTICATED — MAIN APP =====
   return (
     <div className="min-h-screen bg-slate-950">
-      {page === 'landing' && (
-        <LandingPage
-          onStartInterview={handleStartInterview}
-          onStartRapidFire={handleStartRapidFire}
-          onStartResumeScorer={handleStartResumeScorer}
-        />
-      )}
-      {/* RESUME SCORER PAGES */}
-      {page === 'resume-scorer' && (
-        <div className="min-h-screen bg-slate-950 relative">
-          <button onClick={handleBackToHome} className="absolute top-6 left-6 text-slate-400 hover:text-white flex items-center gap-2 z-50">← Back</button>
-          <ResumeUpload onAnalysisComplete={handleResumeAnalysisComplete} />
-        </div>
-      )}
-      {page === 'resume-report' && (
-        <div className="min-h-screen bg-slate-950">
-          <ResumeReport analysis={resumeAnalysis} onReset={() => setPage('resume-scorer')} />
-        </div>
-      )}
+      {/* User Navbar */}
+      <UserNavbar user={session.user} onLogout={handleLogout} />
 
-      {page === 'interview' && interviewSession && (
-        <InterviewPage
-          sessionId={interviewSession.sessionId}
-          firstQuestion={interviewSession.firstQuestion}
-          totalQuestions={interviewSession.totalQuestions}
-          jobRole={interviewSession.jobRole}
-          interviewTips={interviewSession.interviewTips}
-          onAnswer={handleAnswer}
-          onBack={() => setPage('landing')}
-        />
-      )}
-      {page === 'results' && interviewSession?.results && (
-        <ResultsPage
-          data={interviewSession.results}
-          onNewInterview={handleNewInterview}
-        />
-      )}
-      {/* ADD THIS: */}
-      {page === 'rapid-fire' && (
-        <RapidFire onBack={handleBackToHome} onStartVoice={handleStartVoiceMode} />
-      )}
-      {page === 'voice-mode' && interviewSession && (
-        <VoiceInterview
-          initialData={interviewSession}
-          onBack={handleBackToHome}
-          onComplete={(data) => {
-            setInterviewSession({ ...interviewSession, results: data });
-            setPage('results');
-          }}
-        />
-      )}
+      <div className="pt-14">
+        <AnimatePresence mode="wait">
+          {page === 'landing' && (
+            <motion.div key="landing" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <LandingPage
+                onStartInterview={handleStartInterview}
+                onStartRapidFire={handleStartRapidFire}
+                onStartResumeScorer={handleStartResumeScorer}
+                onStartHistory={handleStartHistory}
+              />
+            </motion.div>
+          )}
+
+          {page === 'history' && (
+            <motion.div key="history" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <HistoryDashboard onBack={handleBackToHome} onStartRapidFire={handleStartRapidFire} />
+            </motion.div>
+          )}
+
+          {/* RESUME SCORER PAGES */}
+          {page === 'resume-scorer' && (
+            <motion.div key="resume-scorer" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <div className="min-h-screen bg-slate-950 relative">
+                <button onClick={handleBackToHome} className="absolute top-20 left-6 text-slate-400 hover:text-white flex items-center gap-2 z-40">← Back</button>
+                <ResumeUpload onAnalysisComplete={handleResumeAnalysisComplete} />
+              </div>
+            </motion.div>
+          )}
+          {page === 'resume-report' && (
+            <motion.div key="resume-report" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <div className="min-h-screen bg-slate-950">
+                <ResumeReport analysis={resumeAnalysis} onReset={() => setPage('resume-scorer')} />
+              </div>
+            </motion.div>
+          )}
+
+          {page === 'interview' && interviewSession && (
+            <motion.div key="interview" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <InterviewPage
+                sessionId={interviewSession.sessionId}
+                firstQuestion={interviewSession.firstQuestion}
+                totalQuestions={interviewSession.totalQuestions}
+                jobRole={interviewSession.jobRole}
+                interviewTips={interviewSession.interviewTips}
+                onAnswer={handleAnswer}
+                onBack={() => setPage('landing')}
+              />
+            </motion.div>
+          )}
+          {page === 'results' && interviewSession?.results && (
+            <motion.div key="results" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <ResultsPage
+                data={interviewSession.results}
+                onNewInterview={handleNewInterview}
+              />
+            </motion.div>
+          )}
+
+          {page === 'rapid-fire' && (
+            <motion.div key="rapid-fire" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <RapidFire onBack={handleBackToHome} onStartVoice={handleStartVoiceMode} />
+            </motion.div>
+          )}
+          {page === 'voice-mode' && interviewSession && (
+            <motion.div key="voice-mode" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <VoiceInterview
+                initialData={interviewSession}
+                onBack={handleBackToHome}
+                onComplete={(data) => {
+                  const voiceScore = data?.summary?.average_score || 0;
+                  // Save voice interview to local history
+                  saveInterview({
+                    mode: 'voice',
+                    jobRole: interviewSession?.jobRole || 'Unknown',
+                    score: voiceScore,
+                    questionsCount: data?.summary?.total_questions || 0,
+                  });
+                  // Save to Supabase DB
+                  saveInterviewToDB({
+                    mode: 'voice',
+                    job_role: interviewSession?.jobRole || 'Unknown',
+                    score: voiceScore,
+                    final_report: data?.finalReport || {},
+                    learning_report: data?.learningReport || {},
+                    questions: [],
+                    answers: [],
+                    duration_seconds: 0,
+                  });
+                  setInterviewSession({ ...interviewSession, results: data });
+                  setPage('results');
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
