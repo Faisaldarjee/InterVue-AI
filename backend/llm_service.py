@@ -10,6 +10,8 @@ import os
 import json
 import re
 import logging
+import time
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,86 @@ class EnhancedLLMService:
         
         self.cache_stats = {'total_requests': 0, 'cache_hits': 0, 'api_calls': 0}
 
+        # API Budget Tracker
+        self._api_calls_log = []  # timestamps of API calls
+        self._hourly_limit = int(os.getenv('GEMINI_HOURLY_LIMIT', '55'))  # safe default under free tier 60/hr
+        logger.info(f"⚡ API budget: {self._hourly_limit} calls/hour")
+
+    # ==================== RETRY & BUDGET ====================
+
+    def _check_budget(self) -> bool:
+        """Check if we have API budget remaining this hour"""
+        cutoff = datetime.now() - timedelta(hours=1)
+        self._api_calls_log = [t for t in self._api_calls_log if t > cutoff]
+        remaining = self._hourly_limit - len(self._api_calls_log)
+        if remaining <= int(self._hourly_limit * 0.2):
+            logger.warning(f"⚠️ API budget low: {remaining}/{self._hourly_limit} calls left this hour")
+        return remaining > 0
+
+    def _record_api_call(self):
+        """Record an API call for budget tracking"""
+        self._api_calls_log.append(datetime.now())
+        self.cache_stats['api_calls'] += 1
+
+    def get_budget_status(self) -> dict:
+        """Get current API budget status"""
+        cutoff = datetime.now() - timedelta(hours=1)
+        self._api_calls_log = [t for t in self._api_calls_log if t > cutoff]
+        used = len(self._api_calls_log)
+        return {
+            'used_this_hour': used,
+            'limit': self._hourly_limit,
+            'remaining': self._hourly_limit - used,
+            'percent_used': round(used / self._hourly_limit * 100, 1) if self._hourly_limit > 0 else 0
+        }
+
+    def _call_with_retry(self, prompt: str, max_retries: int = 3, use_resume_key: bool = False) -> str:
+        """
+        Centralized LLM call with exponential backoff retry.
+        Returns raw response text or None on total failure.
+        """
+        if not self._check_budget():
+            logger.error("🚫 API budget exhausted for this hour. Using defaults.")
+            return None
+
+        # Switch API key if needed
+        if use_resume_key and self.resume_api_key:
+            genai.configure(api_key=self.resume_api_key)
+
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = self.model.generate_content(prompt)
+                self._record_api_call()
+
+                # Restore main key if we switched
+                if use_resume_key and self.resume_api_key:
+                    genai.configure(api_key=self.main_api_key)
+
+                return response.text
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                is_retryable = any(k in error_str for k in [
+                    'resource exhausted', '429', '503', 'unavailable',
+                    'deadline', 'timeout', 'quota', 'rate'
+                ])
+
+                if is_retryable and attempt < max_retries - 1:
+                    wait = (2 ** attempt)  # 1s, 2s, 4s
+                    logger.warning(f"⚠️ API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    logger.error(f"❌ API call failed permanently: {e}")
+                    break
+
+        # Restore main key on failure path
+        if use_resume_key and self.resume_api_key:
+            genai.configure(api_key=self.main_api_key)
+
+        return None
+
     def _clean_json_text(self, text: str) -> str:
         """Remove markdown code blocks and clean up JSON"""
         text = text.strip()
@@ -129,12 +211,12 @@ Return this exact JSON format (no extra text, no markdown):
 Fill in the values based on analysis. suggested_questions must be 3-6."""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.warning("⚠️ JSON parse failed, using defaults")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
+                logger.warning("⚠️ Analysis API failed after retries")
                 return self._default_analysis()
+
+            result = self._parse_json_response(response_text)
             
             result['compatibility_score'] = int(result.get('compatibility_score', 50))
             result['skill_match'] = int(result.get('skill_match', 50))
@@ -212,12 +294,12 @@ Note: Set "requires_code" to true ONLY if the user is expected to write logic, f
 Generate {num_questions} valid questions. Return ONLY the JSON array, nothing else."""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.warning("⚠️ Question generation failed, using defaults")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
+                logger.warning("⚠️ Question generation API failed after retries")
                 return self._default_questions(num_questions, job_role)
+
+            result = self._parse_json_response(response_text)
             
             if not isinstance(result, list):
                 result = [result]
@@ -276,12 +358,11 @@ Return this exact JSON (no markdown):
 Score must be 1-10."""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.warning("⚠️ Evaluation JSON parse failed")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
                 return self._default_evaluation()
+
+            result = self._parse_json_response(response_text)
             
             result['score'] = max(1, min(10, int(result.get('score', 5))))
             for field in ['strengths', 'improvements', 'missing_points']:
@@ -325,12 +406,11 @@ Return this exact JSON:
 confidence_level must be 1-10."""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.warning("⚠️ Learning report JSON parse failed")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
                 return self._default_learning_report()
+
+            result = self._parse_json_response(response_text)
             
             result['confidence_level'] = max(1, min(10, int(result.get('confidence_level', 5))))
             for field in ['strengths_demonstrated', 'areas_for_improvement', 'interview_tips', 'next_steps', 'technical_topics_to_study', 'behavioral_patterns_to_develop']:
@@ -375,12 +455,11 @@ Return this exact JSON:
 interview_readiness must be 1-10."""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.warning("⚠️ Final report JSON parse failed")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
                 return self._default_final_report()
+
+            result = self._parse_json_response(response_text)
             
             result['interview_readiness'] = max(1, min(10, int(result.get('interview_readiness', 5))))
             if not isinstance(result.get('key_learnings'), list):
@@ -460,12 +539,12 @@ interview_readiness must be 1-10."""
         """
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.error("❌ Batch evaluation JSON failed")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
+                logger.error("❌ Batch evaluation API failed after retries")
                 return self._default_batch_evaluation(len(answers))
+
+            result = self._parse_json_response(response_text)
             
             # Ensure we have an entry for every question, even if LLM missed one
             evals = result.get('question_evaluations', [])
@@ -524,12 +603,12 @@ interview_readiness must be 1-10."""
         try:
             # For large batches, we might need a model with larger output context or just hope for the best
             # Breaking it down might be better, but let's try one shot first for simplicity
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-            
-            if result is None:
-                logger.error("❌ Batch generation JSON failed")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
+                logger.error("❌ Batch generation API failed")
                 return []
+
+            result = self._parse_json_response(response_text)
                 
             if not isinstance(result, list):
                 if isinstance(result, dict) and 'questions' in result:
@@ -591,24 +670,21 @@ Return ONLY a generic JSON object with this exact structure:
 }}"""
 
         try:
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
+            response_text = self._call_with_retry(prompt, use_resume_key=True)
+            if response_text is None:
+                logger.error("❌ Resume analysis API failed after retries")
+                return self._default_resume_analysis()
+
+            result = self._parse_json_response(response_text)
             
             if result is None:
                 logger.error("❌ Resume analysis JSON bad format")
                 return self._default_resume_analysis()
-            
-            # Restore Main Key for Interviews
-            if self.resume_api_key:
-                genai.configure(api_key=self.main_api_key)
                 
             return result
             
         except Exception as e:
             logger.error(f"❌ Resume Analysis Failed: {e}")
-            # Ensure key is restored even if error
-            if self.resume_api_key:
-                genai.configure(api_key=self.main_api_key)
             return self._default_resume_analysis()
 
     def _default_resume_analysis(self):
@@ -618,3 +694,41 @@ Return ONLY a generic JSON object with this exact structure:
             "ats_feedback": {"missing_keywords": [], "formatting_issues": []},
             "magic_rewrites": []
         }
+
+    def enhance_resume_bullet(self, bullet: str, job_role: str = "") -> dict:
+        """
+        AI-enhance a single resume bullet point.
+        Returns impactful rewrite with action verbs, metrics, and STAR method.
+        """
+        role_context = f" for a {job_role} position" if job_role else ""
+        
+        prompt = f"""You are an expert resume writer. Rewrite this bullet point to be more impactful{role_context}.
+
+ORIGINAL BULLET POINT:
+"{bullet}"
+
+Rules:
+1. Start with a strong ACTION VERB (Led, Developed, Optimized, Architected, etc.)
+2. Add QUANTIFIABLE METRICS where possible (%, $, time saved, users impacted)
+3. Use the RESULT-ORIENTED format: "Action + Context + Impact"
+4. Keep it concise (1-2 lines max)
+5. Make it ATS-friendly with relevant keywords
+
+Return ONLY valid JSON:
+{{"enhanced": "the rewritten bullet point", "tip": "one short tip explaining what was improved"}}"""
+
+        try:
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
+                return {"enhanced": bullet, "tip": "Enhancement service busy. Try again later."}
+
+            result = self._parse_json_response(response_text)
+            
+            if result and 'enhanced' in result:
+                logger.info("✅ Bullet point enhanced")
+                return result
+            
+            return {"enhanced": bullet, "tip": "Could not enhance. Try rephrasing."}
+        except Exception as e:
+            logger.error(f"❌ Bullet enhance failed: {e}")
+            return {"enhanced": bullet, "tip": "Enhancement service unavailable."}

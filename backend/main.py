@@ -4,7 +4,7 @@ InterVue AI - Enhanced Backend
 Smart interview generation with adaptive difficulty and learning insights
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
@@ -28,6 +28,7 @@ from database import (
     get_question_bank_count
 )
 from learning import get_full_learning_data
+from rate_limiter import rate_limiter
 
 load_dotenv()
 
@@ -47,11 +48,46 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        os.getenv("FRONTEND_URL", "https://intervue-ai.vercel.app"),
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==================== REQUEST ID MIDDLEWARE ====================
+import time as _time
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Assign request ID, log timing, check rate limits"""
+    request_id = str(uuid.uuid4())[:8]
+    request.state.request_id = request_id
+    start = _time.time()
+
+    # Rate limit check (skip health endpoints)
+    path = request.url.path
+    if path not in ('/', '/health', '/docs', '/openapi.json', '/favicon.ico'):
+        try:
+            rate_limiter.check(request)
+        except HTTPException as e:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=e.status_code,
+                content={"detail": e.detail},
+                headers=e.headers or {}
+            )
+
+    response = await call_next(request)
+
+    duration = round((_time.time() - start) * 1000)
+    logger.info(f"[{request_id}] {request.method} {path} → {response.status_code} ({duration}ms)")
+
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 # ==================== INIT ====================
 try:
@@ -97,13 +133,16 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
+    """Detailed health check with budget + rate limiter status"""
+    budget = llm.get_budget_status() if llm else {}
     return {
         "status": "healthy",
         "service": "InterVue AI",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "llm_connected": llm is not None,
         "sessions_active": len(sessions),
+        "api_budget": budget,
+        "rate_limiter": rate_limiter.get_status(),
         "analytics": analytics,
         "timestamp": datetime.now().isoformat()
     }
@@ -287,9 +326,36 @@ async def analyze_resume_endpoint(
         logger.error(f"❌ Resume Scorer Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class EnhanceBulletRequest(BaseModel):
+    bullet: str
+    job_role: str = ""
+
+@app.post("/api/enhance-bullet")
+async def enhance_bullet(request: EnhanceBulletRequest):
+    """
+    AI-enhance a single resume bullet point.
+    Returns impactful rewrite with action verbs, metrics, and STAR method.
+    """
+    try:
+        if not llm:
+            raise HTTPException(status_code=503, detail="LLM service unavailable")
+        
+        if not request.bullet or len(request.bullet.strip()) < 5:
+            raise HTTPException(status_code=400, detail="Bullet point too short")
+        
+        result = llm.enhance_resume_bullet(request.bullet, request.job_role)
+        return {"status": "success", **result}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Bullet enhance error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/start-rapid-fire")
 async def start_rapid_fire(
-    request: RapidFireStartRequest
+    request: RapidFireStartRequest,
+    background_tasks: BackgroundTasks
 ):
     """
     Start a Rapid Fire interview session (Frontend Compatible)
@@ -310,6 +376,31 @@ async def start_rapid_fire(
             save_questions_to_bank(request.job_role, questions)
         except Exception as qe:
             logger.error(f"⚠️ Question bank save error: {qe}")
+        
+        # 🧠 Background: Auto-expand question bank if thin
+        def _expand_bank(role: str):
+            """Runs AFTER response — never blocks the user"""
+            try:
+                if not llm or not llm._check_budget():
+                    logger.info(f"⏭️ Skipping bank expansion for '{role}' — budget low")
+                    return
+                
+                # Check current bank size
+                role_questions = rapid_fire.questions_db.get(role, [])
+                if len(role_questions) < 20:
+                    logger.info(f"📦 Auto-expanding question bank for '{role}' ({len(role_questions)} → 50)...")
+                    new_qs = llm.generate_batch_questions(role, num_questions=30)
+                    if new_qs:
+                        save_questions_to_bank(role, new_qs)
+                        # Reload into memory
+                        rapid_fire.questions_db = rapid_fire._load_questions()
+                        logger.info(f"✅ Bank expanded: {len(new_qs)} new questions for '{role}'")
+                    else:
+                        logger.warning(f"⚠️ Bank expansion returned 0 questions for '{role}'")
+            except Exception as e:
+                logger.error(f"❌ Background bank expansion failed: {e}")
+        
+        background_tasks.add_task(_expand_bank, request.job_role)
         
         # Create session
         session_id = str(uuid.uuid4())
@@ -470,28 +561,45 @@ async def submit_answer(session_id: str, user_ans: Answer):
             if session.mode == "rapid_fire":
                  session.completed_at = datetime.now()
                  
-                 # ⚡ KEY CHANGE: Batch Evaluation at the END
+                 # ⚡ Batch AI Evaluation (1 call for all answers)
                  logger.info("⚡ Performing Batch AI Evaluation...")
                  batch_report = llm.evaluate_interview_batch(session.answers, session.job_role)
                  
-                 # Merge batch scores back into the answers list for consistency
+                 # Check if batch eval returned real results or defaults
                  question_evals = batch_report.get('question_evaluations', [])
-                 scores = []
-                 for i, ans in enumerate(session.answers):
-                     if i < len(question_evals):
-                         ans['evaluation'] = question_evals[i] # Update with AI score
-                         # Extract score safely
-                         try:
-                             s = int(question_evals[i].get('score', 0))
-                         except:
-                             s = 0
-                         scores.append(s)
-                     else:
-                         scores.append(0)
+                 is_fallback = all(e.get('feedback', '') == 'Processed (Fallback)' for e in question_evals)
+                 
+                 if is_fallback and rapid_fire:
+                     # AI failed → use upgraded offline scorer
+                     logger.warning("⚠️ AI batch failed, using smart offline fallback")
+                     scores = []
+                     for i, ans in enumerate(session.answers):
+                         q = session.questions[i] if i < len(session.questions) else {}
+                         offline_eval = rapid_fire.evaluate_offline(
+                             ans.get('answer', ''),
+                             q.get('keywords', [])
+                         )
+                         ans['evaluation'] = offline_eval
+                         scores.append(offline_eval['score'])
+                 else:
+                     # AI succeeded → use AI scores
+                     scores = []
+                     for i, ans in enumerate(session.answers):
+                         if i < len(question_evals):
+                             ans['evaluation'] = question_evals[i]
+                             try:
+                                 s = int(question_evals[i].get('score', 0))
+                             except:
+                                 s = 0
+                             scores.append(s)
+                         else:
+                             scores.append(0)
                  
                  # Prepare final results for frontend
                  final_results = batch_report.get('overall_report', {})
+                 avg = round(sum(scores) / len(scores), 1) if scores else 0
                  final_results['scores'] = scores
+                 final_results['average_score'] = avg
                  final_results['best_score'] = max(scores) if scores else 0
                  final_results['worst_score'] = min(scores) if scores else 0
                  final_results['total_questions'] = len(session.answers)

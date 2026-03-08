@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Check, X, Star, Zap, ChevronRight, Download, ArrowRight, TrendingUp } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Check, X, Star, Zap, Download, ArrowLeft, TrendingUp, AlertCircle, Sparkles } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 
 export default function ResumeReport({ analysis, onReset }) {
@@ -10,12 +11,9 @@ export default function ResumeReport({ analysis, onReset }) {
 
     const { score, summary, ats_feedback, magic_rewrites } = analysis;
 
-    // Determine score color
-    const getScoreColor = (s) => {
-        if (s >= 80) return 'text-green-400 border-green-500 shadow-[0_0_30px_rgba(74,222,128,0.3)]';
-        if (s >= 60) return 'text-yellow-400 border-yellow-500 shadow-[0_0_30px_rgba(250,204,21,0.3)]';
-        return 'text-red-400 border-red-500 shadow-[0_0_30px_rgba(248,113,113,0.3)]';
-    };
+    const scoreColor = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+    const scoreLabel = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Work';
+    const scoreBg = score >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : score >= 60 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20';
 
     const handleDownloadPDF = () => {
         setIsDownloading(true);
@@ -27,195 +25,231 @@ export default function ResumeReport({ analysis, onReset }) {
             html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
         };
-
         html2pdf().set(opt).from(element).save().then(() => {
             setIsDownloading(false);
         });
     };
 
-    return (
-        <div className="w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+    const missingKeywords = ats_feedback?.missing_keywords || [];
+    const formattingIssues = ats_feedback?.formatting_issues || [];
 
-            {/* Top Navigation Bar */}
-            <div className="flex justify-between items-center mb-8 bg-slate-900/50 backdrop-blur-md p-4 rounded-2xl border border-slate-700/50 sticky top-4 z-50 shadow-lg">
+    return (
+        <div className="w-full max-w-5xl mx-auto px-4 py-8">
+
+            {/* Top Bar */}
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-between items-center mb-8"
+            >
                 <button
                     onClick={onReset}
-                    className="text-slate-400 hover:text-white transition text-sm flex items-center gap-2 px-3 py-2 hover:bg-slate-800 rounded-lg"
+                    className="text-slate-400 hover:text-white transition text-sm flex items-center gap-2 px-3 py-2 hover:bg-white/5 rounded-xl"
                 >
-                    <ArrowRight className="rotate-180" size={16} /> Check Another Resume
+                    <ArrowLeft size={16} /> Check Another
                 </button>
+                <button
+                    onClick={handleDownloadPDF}
+                    disabled={isDownloading}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-500/10 transition-all text-sm disabled:opacity-60"
+                >
+                    {isDownloading ? (
+                        <span className="animate-pulse">Generating PDF...</span>
+                    ) : (
+                        <><Download size={16} /> Download Report</>
+                    )}
+                </button>
+            </motion.div>
 
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleDownloadPDF}
-                        disabled={isDownloading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl shadow-lg hover:shadow-blue-500/25 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-wait"
-                    >
-                        {isDownloading ? (
-                            <span className="animate-pulse">Generating PDF...</span>
-                        ) : (
-                            <>
-                                <Download size={18} /> Download Report
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
+            {/* Printable Area */}
+            <div ref={reportRef} className="space-y-6" id="report-content">
 
-            {/* Printable Area Wrapper */}
-            <div ref={reportRef} className="bg-[#0f1623] p-4 md:p-10 rounded-3xl shadow-2xl border border-slate-800/60" id="report-content">
-
-                {/* Header Section */}
-                <div className="text-center mb-12 relative">
-                    {/* Decorative background element for header */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -z-10"></div>
-
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-bold mb-4 uppercase tracking-wider">
-                        <Star size={12} className="fill-indigo-300" /> AI Resume Audit
-                    </div>
-                    <h1 className="text-4xl md:text-5xl font-bold text-white mb-2 tracking-tight">Analysis Report</h1>
-                    <p className="text-slate-400">Generated by InterVue AI Engine</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-
-                    {/* 1. Score Card (Hero) */}
-                    <div className="md:col-span-1 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-900/50 border border-slate-700/50 rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden group hover:border-slate-600 transition-all">
-                        {/* Glow behind score */}
-                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full blur-[80px] opacity-20 ${score >= 70 ? 'bg-green-500' : 'bg-red-500'} group-hover:opacity-30 transition-opacity`}></div>
-
-                        <div className={`relative w-48 h-48 rounded-full border-[6px] flex items-center justify-center mb-6 ${getScoreColor(score)} bg-slate-950 transition-all duration-1000 transform group-hover:scale-105`}>
-                            <div className="text-center">
-                                <span className="text-6xl font-bold block text-white drop-shadow-lg">{score}</span>
-                                <span className="text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold">Match Score</span>
+                {/* ===== HERO: Score Circle + Summary ===== */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-3xl p-8 md:p-10"
+                >
+                    <div className="flex flex-col md:flex-row items-center gap-8">
+                        {/* Animated Score Circle */}
+                        <div className="relative w-44 h-44 flex-shrink-0">
+                            <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="8" />
+                                <motion.circle
+                                    cx="60" cy="60" r="52" fill="none"
+                                    stroke={scoreColor}
+                                    strokeWidth="8" strokeLinecap="round"
+                                    strokeDasharray={`${2 * Math.PI * 52}`}
+                                    initial={{ strokeDashoffset: 2 * Math.PI * 52 }}
+                                    animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - score / 100) }}
+                                    transition={{ duration: 1.5, delay: 0.3, ease: 'easeOut' }}
+                                />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <motion.span
+                                    initial={{ opacity: 0, scale: 0.5 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.8, type: 'spring' }}
+                                    className="text-5xl font-extrabold text-white"
+                                >{score}</motion.span>
+                                <span className="text-slate-500 text-xs font-medium mt-0.5">out of 100</span>
                             </div>
                         </div>
-                        <div className="bg-slate-800/50 rounded-xl p-4 w-full">
-                            <p className="text-center text-slate-300 text-sm leading-relaxed">
-                                "{summary}"
+
+                        {/* Summary */}
+                        <div className="flex-1 text-center md:text-left">
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border mb-3 ${scoreBg}`}>
+                                <Star size={12} /> {scoreLabel}
+                            </div>
+                            <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-3 tracking-tight">
+                                Resume Analysis
+                            </h1>
+                            <p className="text-slate-400 leading-relaxed text-sm">
+                                {summary}
                             </p>
                         </div>
                     </div>
+                </motion.div>
 
-                    {/* 2. ATS Check (List) */}
-                    <div className="md:col-span-2 bg-slate-900/50 border border-slate-700/50 rounded-3xl p-8 flex flex-col justify-between hover:border-slate-600 transition-all">
-                        <div>
-                            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                                <TrendingUp className="text-blue-400" /> ATS Compliance Check
-                            </h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                                {/* Missing Keywords */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">Missing Keywords</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {ats_feedback.missing_keywords && ats_feedback.missing_keywords.length > 0 ? (
-                                            ats_feedback.missing_keywords.map((kw, i) => (
-                                                <span key={i} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-300 rounded-lg text-sm flex items-center gap-1.5 font-medium">
-                                                    <X size={14} strokeWidth={3} /> {kw}
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span className="px-4 py-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg text-sm flex items-center gap-2">
-                                                <Check size={16} /> Perfect! All key skills detected.
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                                        *Adding these keywords can increase your ATS ranking by up to 40%.
-                                    </p>
-                                </div>
-
-                                {/* Formatting Issues */}
-                                <div>
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">Formatting Health</h4>
-                                    {ats_feedback.formatting_issues && ats_feedback.formatting_issues.length > 0 ? (
-                                        <ul className="space-y-3">
-                                            {ats_feedback.formatting_issues.map((issue, i) => (
-                                                <li key={i} className="text-sm text-slate-300 flex items-start gap-3 bg-slate-800/30 p-2 rounded-lg">
-                                                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0 shadow-[0_0_8px_rgba(234,179,8,0.5)]"></span>
-                                                    {issue}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <div className="flex items-center gap-3 text-green-400 bg-green-500/5 p-4 rounded-xl border border-green-500/10">
-                                            <div className="p-2 bg-green-500/20 rounded-full">
-                                                <Check size={16} />
-                                            </div>
-                                            <span className="font-medium text-sm">Resume layout is clean and parseable.</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                {/* ===== ATS COMPLIANCE ===== */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-3xl p-8"
+                >
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                            <TrendingUp size={18} className="text-blue-400" />
                         </div>
+                        <h2 className="text-xl font-bold text-white">ATS Compliance</h2>
                     </div>
 
-                </div>
-
-                {/* 3. Magic Rewrites */}
-                <div className="relative">
-                    <div className="absolute inset-0 bg-blue-500/5 blur-3xl -z-10 rounded-full"></div>
-                    <h3 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
-                        <div className="p-2 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
-                            <Zap className="text-yellow-400 fill-yellow-400" size={24} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Missing Keywords */}
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <AlertCircle size={12} /> Missing Keywords
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                                {missingKeywords.length > 0 ? (
+                                    missingKeywords.map((kw, i) => (
+                                        <motion.span
+                                            key={i}
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: 0.3 + i * 0.05 }}
+                                            className="px-3 py-1.5 bg-red-500/10 border border-red-500/15 text-red-300 rounded-lg text-xs font-medium flex items-center gap-1.5"
+                                        >
+                                            <X size={12} strokeWidth={3} /> {kw}
+                                        </motion.span>
+                                    ))
+                                ) : (
+                                    <span className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/15 text-emerald-400 rounded-xl text-xs flex items-center gap-2 font-medium">
+                                        <Check size={14} /> All key skills detected
+                                    </span>
+                                )}
+                            </div>
+                            {missingKeywords.length > 0 && (
+                                <p className="text-[11px] text-slate-600 mt-2">Adding these can boost ATS ranking by up to 40%</p>
+                            )}
                         </div>
-                        Magic Rewrites
-                        <span className="text-sm font-normal text-slate-400 ml-auto hidden md:block">
-                            AI-powered suggestions to boost impact
-                        </span>
-                    </h3>
 
-                    <div className="grid grid-cols-1 gap-6">
-                        {magic_rewrites.map((item, index) => (
-                            <div key={index} className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden hover:border-blue-500/40 transition-all duration-300 shadow-lg group">
+                        {/* Formatting Issues */}
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Check size={12} /> Formatting Health
+                            </h4>
+                            {formattingIssues.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {formattingIssues.map((issue, i) => (
+                                        <motion.li
+                                            key={i}
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.3 + i * 0.05 }}
+                                            className="text-sm text-slate-300 flex items-start gap-2.5 bg-white/[0.02] p-2.5 rounded-lg"
+                                        >
+                                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                            {issue}
+                                        </motion.li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="flex items-center gap-2.5 text-emerald-400 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10 text-sm font-medium">
+                                    <Check size={16} /> Clean & parseable layout
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </motion.div>
+
+                {/* ===== MAGIC REWRITES ===== */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                >
+                    <div className="flex items-center gap-2 mb-5">
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                            <Sparkles size={18} className="text-amber-400" />
+                        </div>
+                        <h2 className="text-xl font-bold text-white">AI Magic Rewrites</h2>
+                        <span className="ml-auto text-slate-600 text-xs hidden md:block">Before → After comparison</span>
+                    </div>
+
+                    <div className="space-y-4">
+                        {magic_rewrites.map((item, idx) => (
+                            <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 15 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.5 + idx * 0.1 }}
+                                className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-2xl overflow-hidden hover:border-slate-700/80 transition-all group"
+                            >
                                 {/* Header */}
-                                <div className="px-6 py-3 bg-slate-800/50 border-b border-slate-700/50 flex justify-between items-center">
-                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Bullet Point Analysis #{index + 1}</span>
+                                <div className="px-5 py-2.5 bg-white/[0.02] border-b border-slate-800/50 flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Bullet #{idx + 1}</span>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2">
-                                    {/* Before */}
-                                    <div className="p-6 border-b md:border-b-0 md:border-r border-slate-700/50 bg-red-500/5">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-300 uppercase">Original</span>
+                                    {/* Original */}
+                                    <div className="p-5 border-b md:border-b-0 md:border-r border-slate-800/50">
+                                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-red-500/10 text-red-400 uppercase tracking-wider mb-2.5">
+                                            Original
                                         </div>
-                                        <p className="text-slate-300 text-sm md:text-base opacity-80 group-hover:opacity-100 transition-opacity">
+                                        <p className="text-slate-400 text-sm leading-relaxed">
                                             "{item.original}"
                                         </p>
                                     </div>
 
-                                    {/* After */}
-                                    <div className="p-6 bg-gradient-to-br from-green-500/5 to-blue-600/5 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                                            <Star size={40} className="text-white" />
+                                    {/* Rewritten */}
+                                    <div className="p-5 bg-emerald-500/[0.02]">
+                                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 uppercase tracking-wider mb-2.5">
+                                            <Zap size={9} /> AI Rewritten
                                         </div>
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-300 uppercase flex items-center gap-1">
-                                                <Zap size={10} className="fill-green-300" /> AI Rewritten
-                                            </span>
-                                        </div>
-                                        <p className="text-white font-medium text-sm md:text-base leading-relaxed mb-4">
+                                        <p className="text-white text-sm leading-relaxed mb-3 font-medium">
                                             "{item.rewritten}"
                                         </p>
-                                        <div className="flex items-start gap-2 text-xs text-blue-300 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20">
-                                            <Star size={14} className="mt-0.5 shrink-0" />
-                                            <span><span className="font-bold">Why it works:</span> {item.explanation}</span>
+                                        <div className="flex items-start gap-2 text-[11px] text-blue-300/80 bg-blue-500/5 p-2.5 rounded-lg border border-blue-500/10">
+                                            <Star size={12} className="mt-0.5 shrink-0 text-blue-400" />
+                                            <span><span className="font-bold text-blue-300">Why:</span> {item.explanation}</span>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
-                </div>
+                </motion.div>
 
-                <div className="mt-12 text-center">
-                    <p className="text-slate-500 text-xs">
-                        InterVue AI • Generated on {new Date().toLocaleDateString()}
+                {/* Footer */}
+                <div className="text-center pt-4">
+                    <p className="text-slate-700 text-[10px] uppercase tracking-widest">
+                        InterVue AI • {new Date().toLocaleDateString()}
                     </p>
                 </div>
             </div>
-
         </div>
     );
 }

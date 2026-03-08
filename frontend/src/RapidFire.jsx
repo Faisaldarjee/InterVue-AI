@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowRight, Loader, AlertCircle, CheckCircle, BarChart3, Clock, Zap, Eye, Flame, Target, Award } from 'lucide-react';
 import axios from 'axios';
 import { saveInterview } from './utils/historyManager';
@@ -137,8 +138,8 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
                     key={count}
                     onClick={() => setQuestionCount(count)}
                     className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all border ${questionCount === count
-                        ? 'bg-gradient-to-r from-rose-600 to-orange-500 text-white border-rose-400 shadow-lg shadow-rose-900/30 scale-105'
-                        : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:border-rose-500/50 hover:text-white'
+                      ? 'bg-gradient-to-r from-rose-600 to-orange-500 text-white border-rose-400 shadow-lg shadow-rose-900/30 scale-105'
+                      : 'bg-slate-700/50 text-slate-300 border-slate-600 hover:border-rose-500/50 hover:text-white'
                       }`}
                   >
                     {count}
@@ -382,12 +383,27 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
           </div>
         </div>
 
-        {/* Timer - Large */}
-        <div className="text-center mb-8">
-          <div className={`text-7xl font-bold font-mono ${getTimerColor()} transition-colors ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
-            {String(timeLeft).padStart(2, '0')}
+        {/* Timer - Circular Ring */}
+        <div className="flex justify-center mb-8">
+          <div className="relative w-32 h-32">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
+              <circle
+                cx="60" cy="60" r="52" fill="none"
+                stroke={timeLeft <= 10 ? '#ef4444' : timeLeft <= 20 ? '#f59e0b' : '#f43f5e'}
+                strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 52}`}
+                strokeDashoffset={2 * Math.PI * 52 * (1 - timeLeft / 60)}
+                style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className={`text-4xl font-extrabold font-mono ${getTimerColor()} transition-colors ${timeLeft <= 10 ? 'animate-pulse' : ''}`}>
+                {String(timeLeft).padStart(2, '0')}
+              </span>
+              <span className="text-slate-500 text-[10px] font-medium">{timeLeft <= 10 ? 'HURRY!' : 'SEC LEFT'}</span>
+            </div>
           </div>
-          <p className="text-slate-400 text-sm mt-2">{timeLeft <= 10 ? '⚠️ Hurry!' : 'seconds left'}</p>
         </div>
 
         {/* Question Card */}
@@ -513,39 +529,56 @@ function RapidFireResults({ results, allAnswers, onNewInterview, onBack }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-rose-950 to-slate-900 p-4">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
+        {/* Header + Score Circle */}
         <div className="text-center mb-12 pt-8">
-          <h1 className="text-5xl font-bold text-white mb-4">
+          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
             {getResultsEmoji()} {getResultsTitle()}
-          </h1>
-          <div className="text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-orange-500 my-8">
-            {avgScore}/10
-          </div>
-          <p className="text-slate-300 text-lg">{getResultsMessage()}</p>
+          </motion.h1>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-slate-400 mb-6">{getResultsMessage()}</motion.p>
+
+          {/* Animated Score Circle */}
+          <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: 'spring' }} className="flex justify-center">
+            <div className="relative w-40 h-40">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(244,63,94,0.1)" strokeWidth="8" />
+                <motion.circle
+                  cx="60" cy="60" r="52" fill="none"
+                  stroke={avgScore >= 7 ? '#10b981' : avgScore >= 5 ? '#f59e0b' : '#ef4444'}
+                  strokeWidth="8" strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 52}`}
+                  initial={{ strokeDashoffset: 2 * Math.PI * 52 }}
+                  animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - avgScore / 10) }}
+                  transition={{ duration: 1.5, delay: 0.3, ease: 'easeOut' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-4xl font-extrabold text-white">{avgScore}</motion.span>
+                <span className="text-slate-500 text-xs font-medium">out of 10</span>
+              </div>
+            </div>
+          </motion.div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-slate-800/50 to-rose-900/30 backdrop-blur border border-rose-500/30 rounded-xl p-6 text-center">
-            <Award size={32} className="mx-auto mb-3 text-yellow-400" />
-            <p className="text-slate-400 text-sm mb-2">Best Score</p>
-            <p className="text-3xl font-bold text-white">{results.best_score}/10</p>
-          </div>
-          <div className="bg-gradient-to-br from-slate-800/50 to-rose-900/30 backdrop-blur border border-rose-500/30 rounded-xl p-6 text-center">
-            <BarChart3 size={32} className="mx-auto mb-3 text-orange-400" />
-            <p className="text-slate-400 text-sm mb-2">Worst Score</p>
-            <p className="text-3xl font-bold text-white">{results.worst_score}/10</p>
-          </div>
-          <div className="bg-gradient-to-br from-slate-800/50 to-rose-900/30 backdrop-blur border border-rose-500/30 rounded-xl p-6 text-center">
-            <Clock size={32} className="mx-auto mb-3 text-blue-400" />
-            <p className="text-slate-400 text-sm mb-2">Total Time</p>
-            <p className="text-3xl font-bold text-white">{Math.round(results.total_time_seconds / 60)}m</p>
-          </div>
-          <div className="bg-gradient-to-br from-slate-800/50 to-rose-900/30 backdrop-blur border border-rose-500/30 rounded-xl p-6 text-center">
-            <Zap size={32} className="mx-auto mb-3 text-green-400" />
-            <p className="text-slate-400 text-sm mb-2">Questions</p>
-            <p className="text-3xl font-bold text-white">{results.total_questions}</p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+          {[
+            { icon: Award, label: 'Best', value: `${results.best_score}/10`, color: 'text-yellow-400' },
+            { icon: BarChart3, label: 'Worst', value: `${results.worst_score}/10`, color: 'text-orange-400' },
+            { icon: Clock, label: 'Time', value: `${Math.round(results.total_time_seconds / 60)}m`, color: 'text-blue-400' },
+            { icon: Zap, label: 'Questions', value: results.total_questions, color: 'text-emerald-400' },
+          ].map((stat, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 + idx * 0.1 }}
+              className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-2xl p-4 text-center"
+            >
+              <stat.icon size={22} className={`mx-auto mb-2 ${stat.color}`} />
+              <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-0.5">{stat.label}</p>
+              <p className="text-xl font-bold text-white">{stat.value}</p>
+            </motion.div>
+          ))}
         </div>
 
         {/* Score Breakdown */}
@@ -596,20 +629,20 @@ function RapidFireResults({ results, allAnswers, onNewInterview, onBack }) {
         </div>
 
         {/* Buttons */}
-        <div className="flex gap-4 justify-center">
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="flex gap-3 justify-center">
           <button
             onClick={onNewInterview}
-            className="px-8 py-4 bg-gradient-to-r from-rose-600 to-orange-500 hover:from-rose-700 hover:to-orange-600 text-white font-bold rounded-lg transition-all inline-flex items-center gap-2 text-lg"
+            className="px-7 py-3.5 bg-gradient-to-r from-rose-600 to-orange-500 hover:from-rose-500 hover:to-orange-400 text-white font-bold rounded-xl transition-all inline-flex items-center gap-2 text-sm shadow-lg shadow-rose-500/10"
           >
             🔄 Try Again
           </button>
           <button
             onClick={onBack}
-            className="px-8 py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition-all text-lg"
+            className="px-7 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium rounded-xl transition-all text-sm"
           >
             ← Back to Home
           </button>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

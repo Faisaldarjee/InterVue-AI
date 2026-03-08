@@ -3,7 +3,7 @@ import {
   Upload, Send, Loader, CheckCircle, AlertCircle,
   Award, Clock, ArrowRight, Zap, Brain,
   BookOpen, Lightbulb, Target, BarChart3, Eye,
-  Mic, MicOff, Code, History, LogOut, User
+  Mic, MicOff, Code, History, LogOut, User, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -17,6 +17,8 @@ import RapidFire from './RapidFire';
 import VoiceInterview from './VoiceInterview';
 import ResumeUpload from './ResumeUpload';
 import ResumeReport from './ResumeReport';
+import ResumeBuilder from './ResumeBuilder';
+import InterviewRoom from './InterviewRoom';
 import GlassCard from './components/GlassCard';
 import { InterviewSkeleton, ResultsSkeleton } from './components/SkeletonLoader';
 import HistoryDashboard from './components/HistoryDashboard';
@@ -53,7 +55,7 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== LANDING PAGE ====================
-function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, onStartHistory }) {
+function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, onStartResumeBuilder, onStartHistory }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobRole, setJobRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -155,234 +157,319 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, 
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 overflow-hidden">
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden -z-10">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-blue-600 rounded-full mix-blend-multiply filter blur-[150px] opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] bg-purple-600 rounded-full mix-blend-multiply filter blur-[150px] opacity-20 animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-600 rounded-full mix-blend-multiply filter blur-[150px] opacity-10 animate-pulse" style={{ animationDelay: '4s' }}></div>
       </div>
 
       <div className="relative z-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center pt-4 pb-12"
+        {/* ==================== HERO SECTION ==================== */}
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8 }}
+          className="pt-8 pb-20 px-4"
         >
-          <div className="inline-block mb-6 px-4 py-2 bg-blue-500/20 border border-blue-500/40 rounded-full backdrop-blur">
-            <span className="text-blue-300 text-sm font-semibold flex items-center gap-2">
-              <Brain size={16} /> Smart Interview Prep
-            </span>
-          </div>
-          <h1 className="text-6xl md:text-7xl font-bold mb-4 text-white leading-tight">
-            InterVue AI
-          </h1>
-          <p className="text-xl text-slate-300 max-w-2xl mx-auto">
-            Personalized interview prep with AI-generated questions, real-time feedback, and confidence-building insights
-          </p>
-
-          {/* Quick Stats Banner */}
-          {historyStats.totalInterviews > 0 && (
+          <div className="max-w-4xl mx-auto text-center">
+            {/* Badge */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3 }}
-              className="mt-6 inline-flex items-center gap-4 px-5 py-2 bg-white/5 border border-white/10 rounded-full backdrop-blur text-sm"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full backdrop-blur-sm mb-8"
             >
-              <span className="text-slate-400">🎯 {historyStats.totalInterviews} interviews</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-yellow-400">⭐ Avg: {historyStats.averageScore}/10</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-orange-400">🔥 {historyStats.streakDays}d streak</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-blue-300 text-sm font-medium">AI-Powered Interview Platform</span>
             </motion.div>
-          )}
-        </motion.div>
 
-        {/* Features Grid */}
-        <div className="max-w-5xl mx-auto px-4 mb-16">
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12"
-          >
-            {[
-              { icon: Brain, label: 'Smart Questions', desc: '3-6 adaptive questions', color: 'blue' },
-              { icon: Lightbulb, label: 'Real Tips', desc: 'Actionable interview tips', color: 'amber' },
-              { icon: BookOpen, label: 'Learn', desc: 'Confidence building', color: 'green' },
-              { icon: Target, label: 'Focused', desc: 'Job-specific prep', color: 'purple' },
-              { icon: History, label: 'History', desc: `${historyStats.totalInterviews} sessions`, color: 'cyan', action: 'history' }
-            ].map((feature, idx) => (
-              <motion.div key={idx} variants={staggerItem}>
-                <GlassCard
-                  glowColor={feature.color}
-                  hoverEffect={true}
-                  onClick={feature.action === 'history' ? onStartHistory : undefined}
-                  style={{ padding: '16px', cursor: feature.action ? 'pointer' : 'default' }}
-                >
-                  <feature.icon size={28} className={`mb-3 ${feature.color === 'blue' ? 'text-blue-400' :
-                    feature.color === 'amber' ? 'text-amber-400' :
-                      feature.color === 'green' ? 'text-green-400' :
-                        feature.color === 'purple' ? 'text-purple-400' : 'text-cyan-400'
-                    }`} />
-                  <h3 className="text-white font-semibold text-sm mb-1">{feature.label}</h3>
-                  <p className="text-slate-400 text-xs">{feature.desc}</p>
-                </GlassCard>
+            {/* Main Title */}
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6 leading-[1.1] tracking-tight"
+            >
+              <span className="text-white">Ace Your Next</span>
+              <br />
+              <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                Interview with AI
+              </span>
+            </motion.h1>
+
+            {/* Subtitle */}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed"
+            >
+              Practice with personalized questions, get real-time AI feedback, build your resume, and walk in with confidence.
+            </motion.p>
+
+            {/* CTA Buttons */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="flex flex-wrap items-center justify-center gap-4"
+            >
+              <button
+                onClick={() => document.querySelector('[data-setup-section]')?.scrollIntoView({ behavior: 'smooth' })}
+                className="px-8 py-3.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20 group text-sm"
+              >
+                Start Interview
+                <ArrowRight size={18} className="group-hover:translate-x-1 transition" />
+              </button>
+              <button
+                onClick={onStartHistory}
+                className="px-8 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all text-sm backdrop-blur-sm"
+              >
+                View History
+              </button>
+            </motion.div>
+
+            {/* Stats Banner */}
+            {historyStats.totalInterviews > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.6 }}
+                className="mt-10 inline-flex items-center gap-5 px-6 py-3 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-sm"
+              >
+                <div className="text-center">
+                  <p className="text-white font-bold text-lg">{historyStats.totalInterviews}</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Interviews</p>
+                </div>
+                <div className="h-8 w-px bg-slate-800" />
+                <div className="text-center">
+                  <p className="text-yellow-400 font-bold text-lg">{historyStats.averageScore}/10</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Avg Score</p>
+                </div>
+                <div className="h-8 w-px bg-slate-800" />
+                <div className="text-center">
+                  <p className="text-orange-400 font-bold text-lg">{historyStats.streakDays}d</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Streak</p>
+                </div>
               </motion.div>
-            ))}
-          </motion.div>
+            )}
+          </div>
+        </motion.section>
 
-          {/* Form Container */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Info Side */}
-            <div className="lg:col-span-1 space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-3">Why InterVue?</h2>
-                <ul className="space-y-3">
-                  {[
-                    'Questions match your experience level',
-                    'Learn what interviewers look for',
-                    'Real interview tips & strategies',
-                    'Confidence boost before applying',
-                    'Detailed performance analysis'
-                  ].map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-slate-300">
-                      <CheckCircle size={18} className="text-green-400 mt-1 flex-shrink-0" />
-                      <span className="text-sm">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+        {/* ==================== FEATURE CARDS ==================== */}
+        <section className="py-16 px-4">
+          <div className="max-w-5xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-3xl font-bold text-white mb-3">Everything You Need to Succeed</h2>
+              <p className="text-slate-400 max-w-xl mx-auto">Four powerful tools to prepare you for any interview scenario</p>
+            </motion.div>
 
-            {/* Form Side */}
-            <div className="lg:col-span-2">
-              <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-8 space-y-6">
-                <h2 className="text-2xl font-bold text-white">Choose Your Training Mode</h2>
-
-                {/* THREE BUTTONS SECTION - RAPID FIRE + STANDARD + RESUME SCORER */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  {/* RAPID FIRE BUTTON */}
-                  <button
-                    onClick={onStartRapidFire}
-                    className="p-4 bg-gradient-to-br from-red-600/20 to-red-900/20 hover:from-red-600/30 hover:to-red-900/30 border-2 border-red-500/40 hover:border-red-500/60 rounded-xl transition-all group text-left"
-                  >
-                    <div className="text-xl mb-2">🔥</div>
-                    <h3 className="text-white font-bold mb-1">Rapid Fire</h3>
-                    <p className="text-red-300 text-[10px] sm:text-xs">Speed Mode • 60s/Q</p>
-                  </button>
-
-                  {/* RESUME SCORER BUTTON (NEW) */}
-                  <button
-                    onClick={onStartResumeScorer}
-                    className="p-4 bg-gradient-to-br from-purple-600/20 to-purple-900/20 hover:from-purple-600/30 hover:to-purple-900/30 border-2 border-purple-500/40 hover:border-purple-500/60 rounded-xl transition-all group text-left"
-                  >
-                    <div className="text-xl mb-2">📄</div>
-                    <h3 className="text-white font-bold mb-1">Resume AI</h3>
-                    <p className="text-purple-300 text-[10px] sm:text-xs">Score + ATS Check</p>
-                  </button>
-
-                  {/* STANDARD BUTTON */}
-                  <button
-                    onClick={() => document.querySelector('[data-standard-scroll]')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="p-4 bg-gradient-to-br from-blue-600/20 to-blue-900/20 hover:from-blue-600/30 hover:to-blue-900/30 border-2 border-blue-500/40 hover:border-blue-500/60 rounded-xl transition-all group text-left"
-                  >
-                    <div className="text-xl mb-2">📝</div>
-                    <h3 className="text-white font-bold mb-1">Standard</h3>
-                    <p className="text-blue-300 text-[10px] sm:text-xs">Deep Dive Interview</p>
-                  </button>
-                </div>
-
-                {/* Standard Interview Form */}
-                <div data-standard-scroll className="space-y-6 pt-6 border-t border-slate-600">
-                  <h3 className="text-lg font-semibold text-white">📝 Standard Interview Setup</h3>
-
-                  {/* Resume Upload */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-3">
-                      <Upload size={18} className="inline mr-2" />
-                      Upload Resume
-                    </label>
-                    <div
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
-                        ? 'border-blue-400 bg-blue-500/20'
-                        : 'border-slate-600 hover:border-blue-500/60 bg-slate-800/50'
-                        }`}
-                    >
-                      <Upload size={40} className="mx-auto mb-3 text-blue-400" />
-                      <p className="text-white font-semibold">Drag resume here or</p>
-                      <label className="inline-block mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer transition font-semibold text-sm">
-                        Browse Files
-                        <input
-                          type="file"
-                          onChange={handleFileChange}
-                          accept=".pdf,.docx"
-                          className="hidden"
-                        />
-                      </label>
-                      <p className="text-slate-400 text-xs mt-2">PDF or DOCX • Max 200MB</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                {
+                  emoji: '🎥', title: 'Standard Interview', desc: 'Upload your resume, get personalized questions, and practice in a real video-call-style interview room with AI evaluation.',
+                  color: 'blue', border: 'border-blue-500/20 hover:border-blue-500/40',
+                  bg: 'from-blue-500/5 to-blue-900/5 hover:from-blue-500/10 hover:to-blue-900/10',
+                  tag: 'Most Popular', tagColor: 'bg-blue-500/20 text-blue-300',
+                  action: () => document.querySelector('[data-setup-section]')?.scrollIntoView({ behavior: 'smooth' })
+                },
+                {
+                  emoji: '🔥', title: 'Rapid Fire Mode', desc: 'Test your speed with quick-fire questions. 60 seconds per question — think fast, answer faster. Great for warm-up.',
+                  color: 'red', border: 'border-red-500/20 hover:border-red-500/40',
+                  bg: 'from-red-500/5 to-red-900/5 hover:from-red-500/10 hover:to-red-900/10',
+                  tag: 'Speed Mode', tagColor: 'bg-red-500/20 text-red-300',
+                  action: onStartRapidFire
+                },
+                {
+                  emoji: '📊', title: 'Resume Scorer', desc: 'Get your ATS compatibility score, detailed section analysis, and AI-powered suggestions to strengthen your resume.',
+                  color: 'purple', border: 'border-purple-500/20 hover:border-purple-500/40',
+                  bg: 'from-purple-500/5 to-purple-900/5 hover:from-purple-500/10 hover:to-purple-900/10',
+                  tag: 'ATS Check', tagColor: 'bg-purple-500/20 text-purple-300',
+                  action: onStartResumeScorer
+                },
+                {
+                  emoji: '✨', title: 'Resume Builder', desc: 'Build a professional resume with 3 templates, AI-enhanced bullet points, and one-click PDF download.',
+                  color: 'emerald', border: 'border-emerald-500/20 hover:border-emerald-500/40',
+                  bg: 'from-emerald-500/5 to-emerald-900/5 hover:from-emerald-500/10 hover:to-emerald-900/10',
+                  tag: 'New', tagColor: 'bg-emerald-500/20 text-emerald-300',
+                  action: onStartResumeBuilder
+                }
+              ].map((card, idx) => (
+                <motion.button
+                  key={idx}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1 }}
+                  onClick={card.action}
+                  className={`p-6 bg-gradient-to-br ${card.bg} border ${card.border} rounded-2xl transition-all text-left group hover:shadow-xl hover:-translate-y-1 duration-300`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-2xl">
+                      {card.emoji}
                     </div>
-                    {resumeFile && (
-                      <div className="mt-3 p-3 bg-green-500/20 border border-green-500/40 rounded-lg flex items-center gap-2">
-                        <CheckCircle size={18} className="text-green-400" />
-                        <span className="text-green-300 text-sm font-semibold">{resumeFile.name}</span>
-                      </div>
-                    )}
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${card.tagColor}`}>
+                      {card.tag}
+                    </span>
                   </div>
-
-                  {/* Job Role */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      💼 Job Role
-                    </label>
-                    <input
-                      type="text"
-                      value={jobRole}
-                      onChange={(e) => setJobRole(e.target.value)}
-                      placeholder="e.g., Senior Python Developer"
-                      className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
-                    />
+                  <h3 className="text-white font-bold text-lg mb-2">{card.title}</h3>
+                  <p className="text-slate-400 text-sm leading-relaxed">{card.desc}</p>
+                  <div className="mt-4 flex items-center gap-1.5 text-blue-400 text-xs font-semibold opacity-0 group-hover:opacity-100 transition">
+                    Get Started <ArrowRight size={14} />
                   </div>
-
-                  {/* Job Description */}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-300 mb-2">
-                      📋 Job Description
-                    </label>
-                    <textarea
-                      value={jobDescription}
-                      onChange={(e) => setJobDescription(e.target.value)}
-                      placeholder="Paste job description here..."
-                      rows="4"
-                      className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none"
-                    />
-                  </div>
-
-                  {/* Start Standard Button */}
-                  <button
-                    onClick={handleStartInterview}
-                    disabled={loading || !resumeFile || !jobRole || !jobDescription}
-                    className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader size={20} className="animate-spin" />
-                        Analyzing & Generating Questions...
-                      </>
-                    ) : (
-                      <>
-                        Start Standard Interview
-                        <ArrowRight size={20} className="group-hover:translate-x-1 transition" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+                </motion.button>
+              ))}
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* ==================== SOCIAL PROOF ==================== */}
+        <section className="py-12 px-4 border-y border-slate-800/50">
+          <div className="max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+              {[
+                { value: '10,000+', label: 'Interviews Practiced', icon: '🎯' },
+                { value: '4.8/5', label: 'User Satisfaction', icon: '⭐' },
+                { value: '95%', label: 'Feel More Prepared', icon: '💪' },
+                { value: '3 Min', label: 'Avg Setup Time', icon: '⚡' }
+              ].map((stat, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1 }}
+                >
+                  <p className="text-2xl mb-1">{stat.icon}</p>
+                  <p className="text-white font-bold text-xl">{stat.value}</p>
+                  <p className="text-slate-500 text-xs">{stat.label}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== INTERVIEW SETUP FORM ==================== */}
+        <section data-setup-section className="py-20 px-4">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-10"
+            >
+              <h2 className="text-3xl font-bold text-white mb-3">Start Your Interview</h2>
+              <p className="text-slate-400">Upload your resume, specify the role, and let AI create personalized questions</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-gradient-to-br from-slate-900/80 to-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 space-y-6"
+            >
+              {/* Resume Upload */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  <Upload size={16} className="text-blue-400" />
+                  Upload Resume
+                </label>
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${dragActive
+                    ? 'border-blue-400 bg-blue-500/10'
+                    : 'border-slate-700/50 hover:border-blue-500/30 bg-slate-800/20'
+                    }`}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+                    <Upload size={24} className="text-blue-400" />
+                  </div>
+                  <p className="text-white font-semibold mb-1">Drop your resume here</p>
+                  <p className="text-slate-500 text-xs mb-4">or click to browse</p>
+                  <label className="inline-block px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl cursor-pointer transition font-semibold text-sm">
+                    Choose File
+                    <input type="file" onChange={handleFileChange} accept=".pdf,.docx" className="hidden" />
+                  </label>
+                  <p className="text-slate-600 text-xs mt-3">PDF or DOCX • Max 200MB</p>
+                </div>
+                {resumeFile && (
+                  <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
+                    <CheckCircle size={16} className="text-emerald-400" />
+                    <span className="text-emerald-300 text-sm font-medium">{resumeFile.name}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Inputs Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                    <Briefcase size={14} className="text-purple-400" /> Job Role
+                  </label>
+                  <input
+                    type="text"
+                    value={jobRole}
+                    onChange={(e) => setJobRole(e.target.value)}
+                    placeholder="e.g., Senior Python Developer"
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition text-sm"
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                    <Target size={14} className="text-amber-400" /> Experience Level
+                  </label>
+                  <select className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-slate-400 focus:border-blue-500/50 focus:outline-none transition text-sm appearance-none">
+                    <option>Entry Level</option>
+                    <option>Mid Level</option>
+                    <option>Senior</option>
+                    <option>Lead / Principal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                  <BookOpen size={14} className="text-cyan-400" /> Job Description
+                </label>
+                <textarea
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Paste the job description here for more targeted questions..."
+                  rows="4"
+                  className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition resize-none text-sm"
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                onClick={handleStartInterview}
+                disabled={loading || !resumeFile || !jobRole || !jobDescription}
+                className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 group text-sm shadow-lg shadow-blue-500/10 disabled:shadow-none"
+              >
+                {loading ? (
+                  <>
+                    <Loader size={18} className="animate-spin" />
+                    Analyzing Resume & Generating Questions...
+                  </>
+                ) : (
+                  <>
+                    <Zap size={18} />
+                    Start Standard Interview
+                    <ArrowRight size={18} className="group-hover:translate-x-1 transition" />
+                  </>
+                )}
+              </button>
+            </motion.div>
+          </div>
+        </section>
+
       </div>
 
       {error && <Notification message={error} type="error" onClose={() => setError(null)} />}
@@ -736,43 +823,70 @@ function ResultsPage({ data, onNewInterview }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-4">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
+        {/* Hero + Score */}
         <div className="text-center mb-12 pt-8">
-          <div className="inline-block mb-6 px-4 py-2 bg-blue-500/20 border border-blue-500/40 rounded-full">
-            <span className="text-blue-300 text-sm font-semibold">Interview Complete</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">Your Results & Learning Report</h1>
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="inline-block mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-emerald-300 text-sm font-medium">Interview Complete</span>
+            </div>
+          </motion.div>
+          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
+            Your Results
+          </motion.h1>
+
+          {/* Animated Score Circle */}
+          {summary.average_score && (
+            <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: 'spring' }} className="mt-8 mb-10 flex justify-center">
+              <div className="relative w-40 h-40">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                  <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(59,130,246,0.1)" strokeWidth="8" />
+                  <motion.circle
+                    cx="60" cy="60" r="52" fill="none"
+                    stroke={summary.average_score >= 7 ? '#10b981' : summary.average_score >= 5 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 52}`}
+                    initial={{ strokeDashoffset: 2 * Math.PI * 52 }}
+                    animate={{ strokeDashoffset: 2 * Math.PI * 52 * (1 - summary.average_score / 10) }}
+                    transition={{ duration: 1.5, delay: 0.3, ease: 'easeOut' }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-4xl font-extrabold text-white">{summary.average_score}</motion.p>
+                  <p className="text-slate-500 text-xs font-medium">out of 10</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
 
-        {/* Stats */}
+        {/* Stats Grid */}
         {summary.average_score && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-xl p-6 text-center">
-              <Award size={32} className="mx-auto mb-3 text-yellow-400" />
-              <p className="text-slate-400 text-sm mb-2">Average Score</p>
-              <p className="text-3xl font-bold text-white">{summary.average_score}/10</p>
-            </div>
-            <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-xl p-6 text-center">
-              <BarChart3 size={32} className="mx-auto mb-3 text-blue-400" />
-              <p className="text-slate-400 text-sm mb-2">Questions</p>
-              <p className="text-3xl font-bold text-white">{summary.total_questions || 0}</p>
-            </div>
-            <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-xl p-6 text-center">
-              <Clock size={32} className="mx-auto mb-3 text-purple-400" />
-              <p className="text-slate-400 text-sm mb-2">Duration</p>
-              <p className="text-2xl font-bold text-white">{summary.duration ? summary.duration.split('.')[0] : 'N/A'}</p>
-            </div>
-            <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-xl p-6 text-center">
-              <Zap size={32} className="mx-auto mb-3 text-green-400" />
-              <p className="text-slate-400 text-sm mb-2">Readiness</p>
-              <p className="text-lg font-bold text-green-400">{summary.estimated_readiness || 'See report'}</p>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+            {[
+              { icon: BarChart3, label: 'Questions', value: summary.total_questions || 0, color: 'blue' },
+              { icon: Clock, label: 'Duration', value: summary.duration ? summary.duration.split('.')[0] : 'N/A', color: 'purple' },
+              { icon: Zap, label: 'Readiness', value: summary.estimated_readiness || 'See report', color: 'green' },
+            ].map((stat, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + idx * 0.1 }}
+                className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-2xl p-5 text-center"
+              >
+                <stat.icon size={24} className={`mx-auto mb-2 ${stat.color === 'blue' ? 'text-blue-400' : stat.color === 'purple' ? 'text-purple-400' : 'text-emerald-400'
+                  }`} />
+                <p className="text-slate-500 text-xs mb-1">{stat.label}</p>
+                <p className="text-xl font-bold text-white">{stat.value}</p>
+              </motion.div>
+            ))}
           </div>
         )}
 
         {/* Learning Report */}
         {learningReport.overall_assessment && (
-          <div className="bg-gradient-to-br from-slate-800/40 to-blue-900/40 backdrop-blur border border-blue-500/30 rounded-2xl p-8 mb-8">
+          <div className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-2xl p-8 mb-8">
             <div className="flex items-center gap-2 mb-4">
               <BookOpen size={24} className="text-blue-400" />
               <h2 className="text-2xl font-bold text-white">Learning Report</h2>
@@ -871,16 +985,16 @@ function ResultsPage({ data, onNewInterview }) {
         )}
 
         {/* New Interview Button */}
-        <div className="text-center">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="text-center mt-10 pb-8">
           <button
             onClick={onNewInterview}
-            className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold rounded-lg transition-all inline-flex items-center gap-2 group"
+            className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl transition-all inline-flex items-center gap-2.5 group shadow-lg shadow-blue-500/10 text-sm"
           >
-            <Zap size={20} />
+            <Zap size={18} />
             Start Another Interview
-            <ArrowRight size={20} className="group-hover:translate-x-1 transition" />
+            <ArrowRight size={18} className="group-hover:translate-x-1 transition" />
           </button>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -894,52 +1008,64 @@ const pageVariants = {
 };
 
 // ==================== USER NAVBAR ====================
-function UserNavbar({ user, onLogout }) {
+function UserNavbar({ user, onLogout, onHome, currentPage }) {
   const [showMenu, setShowMenu] = useState(false);
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Brain size={20} className="text-blue-400" />
-          <span className="text-white font-bold text-sm">InterVue AI</span>
+    <div className="fixed top-0 left-0 right-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-white/[0.06]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
+        {/* Left — Logo */}
+        <div className="flex items-center">
+          <button onClick={onHome} className="flex items-center gap-2 hover:opacity-80 transition">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Brain size={16} className="text-white" />
+            </div>
+            <span className="text-white font-bold text-sm tracking-tight hidden sm:block">InterVue AI</span>
+          </button>
         </div>
+
+        {/* Right — Profile */}
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition"
+            className="flex items-center gap-2.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl transition"
           >
             {avatar ? (
-              <img src={avatar} alt="" className="w-6 h-6 rounded-full" />
+              <img src={avatar} alt="" className="w-7 h-7 rounded-lg object-cover" />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-blue-500/30 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center">
                 <User size={14} className="text-blue-300" />
               </div>
             )}
-            <span className="text-white text-sm font-medium max-w-[120px] truncate">{displayName}</span>
+            <span className="text-white text-sm font-medium max-w-[120px] truncate hidden sm:block">{displayName}</span>
           </button>
 
           {showMenu && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute right-0 top-12 w-48 py-2 rounded-xl border border-white/10 shadow-xl"
-              style={{ background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(20px)' }}
-            >
-              <div className="px-4 py-2 border-b border-white/5">
-                <p className="text-white text-sm font-semibold truncate">{displayName}</p>
-                <p className="text-slate-500 text-xs truncate">{user?.email}</p>
-              </div>
-              <button
-                onClick={() => { setShowMenu(false); onLogout(); }}
-                className="w-full px-4 py-2.5 text-left text-red-400 hover:bg-white/5 transition flex items-center gap-2 text-sm"
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="absolute right-0 top-12 w-52 py-1.5 rounded-xl border border-white/10 shadow-2xl z-50"
+                style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(20px)' }}
               >
-                <LogOut size={16} />
-                Sign Out
-              </button>
-            </motion.div>
+                <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                  <p className="text-white text-sm font-semibold truncate">{displayName}</p>
+                  <p className="text-slate-500 text-xs truncate">{user?.email}</p>
+                </div>
+                <div className="p-1.5">
+                  <button
+                    onClick={() => { setShowMenu(false); onLogout(); }}
+                    className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                  >
+                    <LogOut size={14} />
+                    Sign Out
+                  </button>
+                </div>
+              </motion.div>
+            </>
           )}
         </div>
       </div>
@@ -1056,6 +1182,10 @@ export default function App() {
     setPage('resume-scorer');
   };
 
+  const handleStartResumeBuilder = () => {
+    setPage('resume-builder');
+  };
+
   const handleResumeAnalysisComplete = (data) => {
     setResumeAnalysis(data);
     setPage('resume-report');
@@ -1090,7 +1220,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* User Navbar */}
-      <UserNavbar user={session.user} onLogout={handleLogout} />
+      <UserNavbar user={session.user} onLogout={handleLogout} onHome={() => setPage('landing')} currentPage={page} />
 
       <div className="pt-14">
         <AnimatePresence mode="wait">
@@ -1100,6 +1230,7 @@ export default function App() {
                 onStartInterview={handleStartInterview}
                 onStartRapidFire={handleStartRapidFire}
                 onStartResumeScorer={handleStartResumeScorer}
+                onStartResumeBuilder={handleStartResumeBuilder}
                 onStartHistory={handleStartHistory}
               />
             </motion.div>
@@ -1128,9 +1259,15 @@ export default function App() {
             </motion.div>
           )}
 
+          {page === 'resume-builder' && (
+            <motion.div key="resume-builder" variants={pageVariants} initial="initial" animate="animate" exit="exit">
+              <ResumeBuilder onBack={handleBackToHome} />
+            </motion.div>
+          )}
+
           {page === 'interview' && interviewSession && (
             <motion.div key="interview" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              <InterviewPage
+              <InterviewRoom
                 sessionId={interviewSession.sessionId}
                 firstQuestion={interviewSession.firstQuestion}
                 totalQuestions={interviewSession.totalQuestions}

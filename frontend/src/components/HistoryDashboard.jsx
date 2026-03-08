@@ -131,8 +131,8 @@ function SkillRadar({ skillData }) {
             <div className="flex flex-wrap gap-2 justify-center mt-2">
                 {Object.entries(skillData).map(([skill, val]) => (
                     <span key={skill} className={`text-xs px-2 py-1 rounded-full border ${val >= 70 ? 'text-green-300 border-green-500/30 bg-green-500/10' :
-                            val >= 40 ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
-                                'text-red-300 border-red-500/30 bg-red-500/10'
+                        val >= 40 ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
+                            'text-red-300 border-red-500/30 bg-red-500/10'
                         }`}>
                         {skill}: {val}%
                     </span>
@@ -258,8 +258,8 @@ function Achievements({ achievements }) {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: i * 0.05 }}
                         className={`text-center p-3 rounded-xl border transition-all ${ach.unlocked
-                                ? 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400/50 hover:scale-105'
-                                : 'bg-slate-800/30 border-slate-700/30 opacity-40 grayscale'
+                            ? 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-400/50 hover:scale-105'
+                            : 'bg-slate-800/30 border-slate-700/30 opacity-40 grayscale'
                             }`}
                         title={`${ach.name}: ${ach.description}`}
                     >
@@ -377,9 +377,9 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                 <div className="flex items-center justify-between mb-8">
                     <button
                         onClick={onBack}
-                        className="text-slate-400 hover:text-white transition flex items-center gap-2 group"
+                        className="text-slate-400 hover:text-white transition flex items-center gap-2 group text-sm px-3 py-1.5 hover:bg-white/5 rounded-xl"
                     >
-                        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+                        <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                         Back Home
                     </button>
                     <button
@@ -397,15 +397,14 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center mb-10"
                 >
-                    <div className="inline-block mb-4 px-4 py-2 bg-blue-500/20 border border-blue-500/40 rounded-full backdrop-blur">
-                        <span className="text-blue-300 text-sm font-semibold flex items-center gap-2">
-                            <Sparkles size={16} /> Smart Learning Dashboard
-                        </span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full mb-5">
+                        <Sparkles size={14} className="text-blue-400" />
+                        <span className="text-blue-300 text-xs font-medium">Smart Learning Dashboard</span>
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">
+                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
                         Your Learning Journey
                     </h1>
-                    <p className="text-slate-400 max-w-xl mx-auto">
+                    <p className="text-slate-400 max-w-xl mx-auto text-sm">
                         Track skills, earn XP, unlock achievements, and get personalized recommendations
                     </p>
                 </motion.div>
@@ -423,14 +422,16 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                         className="text-center py-20"
                     >
                         <GlassCard glowColor="blue" className="max-w-md mx-auto">
-                            <Brain size={64} className="mx-auto mb-4 text-blue-400 opacity-50" />
-                            <h2 className="text-2xl font-bold text-white mb-3">No Interviews Yet</h2>
-                            <p className="text-slate-400 mb-6">
+                            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+                                <Brain size={32} className="text-blue-400" />
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-white mb-2 tracking-tight">No Interviews Yet</h2>
+                            <p className="text-slate-400 text-sm mb-6">
                                 Complete your first interview to start tracking your progress!
                             </p>
                             <button
                                 onClick={onBack}
-                                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all"
+                                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-500/10 transition-all text-sm"
                             >
                                 Start Practicing
                             </button>
