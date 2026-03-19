@@ -329,6 +329,7 @@ async def analyze_resume_endpoint(
 class EnhanceBulletRequest(BaseModel):
     bullet: str
     job_role: str = ""
+    job_description: str = ""
 
 @app.post("/api/enhance-bullet")
 async def enhance_bullet(request: EnhanceBulletRequest):
@@ -343,7 +344,7 @@ async def enhance_bullet(request: EnhanceBulletRequest):
         if not request.bullet or len(request.bullet.strip()) < 5:
             raise HTTPException(status_code=400, detail="Bullet point too short")
         
-        result = llm.enhance_resume_bullet(request.bullet, request.job_role)
+        result = llm.enhance_resume_bullet(request.bullet, request.job_role, request.job_description)
         return {"status": "success", **result}
     
     except HTTPException:

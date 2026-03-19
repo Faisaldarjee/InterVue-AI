@@ -695,14 +695,15 @@ Return ONLY a generic JSON object with this exact structure:
             "magic_rewrites": []
         }
 
-    def enhance_resume_bullet(self, bullet: str, job_role: str = "") -> dict:
+    def enhance_resume_bullet(self, bullet: str, job_role: str = "", job_description: str = "") -> dict:
         """
         AI-enhance a single resume bullet point.
         Returns impactful rewrite with action verbs, metrics, and STAR method.
         """
         role_context = f" for a {job_role} position" if job_role else ""
+        jd_context = f"\n\nTARGET JOB DESCRIPTION (Align the bullet to match keywords and requirements here if applicable):\n{job_description}" if job_description else ""
         
-        prompt = f"""You are an expert resume writer. Rewrite this bullet point to be more impactful{role_context}.
+        prompt = f"""You are an expert resume writer. Rewrite this bullet point to be more impactful{role_context}.{jd_context}
 
 ORIGINAL BULLET POINT:
 "{bullet}"

@@ -22,7 +22,7 @@ import InterviewRoom from './InterviewRoom';
 import GlassCard from './components/GlassCard';
 import { InterviewSkeleton, ResultsSkeleton } from './components/SkeletonLoader';
 import HistoryDashboard from './components/HistoryDashboard';
-import AuthPages from './components/AuthPages';
+import AuthModal from './components/AuthModal';
 import { staggerContainer, staggerItem } from './components/PageTransition';
 import { saveInterview, getStats, setCurrentUser } from './utils/historyManager';
 import { supabase, signOut, getAccessToken, onAuthStateChange } from './utils/supabaseClient';
@@ -55,7 +55,7 @@ function Notification({ message, type, onClose }) {
 }
 
 // ==================== LANDING PAGE ====================
-function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, onStartResumeBuilder, onStartHistory }) {
+function LandingPage({ isAuthenticated, userName, onStartInterview, onStartRapidFire, onStartResumeScorer, onStartResumeBuilder, onStartHistory }) {
   const [resumeFile, setResumeFile] = useState(null);
   const [jobRole, setJobRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -100,6 +100,18 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, 
   const handleStartInterview = async () => {
     if (!resumeFile || !jobRole || !jobDescription) {
       setError('Please fill all fields');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      const onAuthSuccess = () => {
+        window.removeEventListener('auth-success', onAuthSuccess);
+        handleStartInterview();
+      };
+      window.addEventListener('auth-success', onAuthSuccess);
+      window.dispatchEvent(new CustomEvent('require-auth', { 
+        detail: { message: 'Create a free account to generate your personalized AI interview.' } 
+      }));
       return;
     }
 
@@ -183,18 +195,33 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, 
             </motion.div>
 
             {/* Main Title */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6 leading-[1.1] tracking-tight"
-            >
-              <span className="text-white">Ace Your Next</span>
-              <br />
-              <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                Interview with AI
-              </span>
-            </motion.h1>
+            {isAuthenticated ? (
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6 leading-[1.1] tracking-tight"
+              >
+                <span className="text-white">Welcome back, {userName || 'Ready'}!</span>
+                <br />
+                <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                  Let's Land That Job.
+                </span>
+              </motion.h1>
+            ) : (
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6 leading-[1.1] tracking-tight"
+              >
+                <span className="text-white">Ace Your Next</span>
+                <br />
+                <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                  Interview with AI
+                </span>
+              </motion.h1>
+            )}
 
             {/* Subtitle */}
             <motion.p
@@ -229,7 +256,7 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, 
             </motion.div>
 
             {/* Stats Banner */}
-            {historyStats.totalInterviews > 0 && (
+            {isAuthenticated && historyStats.totalInterviews > 0 ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -247,8 +274,30 @@ function LandingPage({ onStartInterview, onStartRapidFire, onStartResumeScorer, 
                 </div>
                 <div className="h-8 w-px bg-slate-800" />
                 <div className="text-center">
-                  <p className="text-orange-400 font-bold text-lg">{historyStats.streakDays}d</p>
+                  <p className="text-orange-400 font-bold text-lg">{historyStats.streakDays || 1}d</p>
                   <p className="text-slate-500 text-[10px] uppercase tracking-wider">Streak</p>
+                </div>
+              </motion.div>
+            ) : !isAuthenticated && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.6 }}
+                className="mt-10 inline-flex items-center gap-5 px-6 py-3 bg-white/[0.03] border border-white/[0.06] rounded-2xl backdrop-blur-sm"
+              >
+                <div className="text-center">
+                  <p className="text-white font-bold text-lg">50k+</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Active Users</p>
+                </div>
+                <div className="h-8 w-px bg-slate-800" />
+                <div className="text-center">
+                  <p className="text-emerald-400 font-bold text-lg">92%</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Success Rate</p>
+                </div>
+                <div className="h-8 w-px bg-slate-800" />
+                <div className="text-center">
+                  <p className="text-purple-400 font-bold text-lg">2M+</p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wider">Interviews</p>
                 </div>
               </motion.div>
             )}
@@ -1008,7 +1057,7 @@ const pageVariants = {
 };
 
 // ==================== USER NAVBAR ====================
-function UserNavbar({ user, onLogout, onHome, currentPage }) {
+function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
   const [showMenu, setShowMenu] = useState(false);
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
@@ -1028,44 +1077,55 @@ function UserNavbar({ user, onLogout, onHome, currentPage }) {
 
         {/* Right — Profile */}
         <div className="relative">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="flex items-center gap-2.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl transition"
-          >
-            {avatar ? (
-              <img src={avatar} alt="" className="w-7 h-7 rounded-lg object-cover" />
-            ) : (
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center">
-                <User size={14} className="text-blue-300" />
-              </div>
-            )}
-            <span className="text-white text-sm font-medium max-w-[120px] truncate hidden sm:block">{displayName}</span>
-          </button>
-
-          {showMenu && (
+          {user ? (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <motion.div
-                initial={{ opacity: 0, y: -5, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                className="absolute right-0 top-12 w-52 py-1.5 rounded-xl border border-white/10 shadow-2xl z-50"
-                style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(20px)' }}
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="flex items-center gap-2.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl transition"
               >
-                <div className="px-4 py-2.5 border-b border-white/[0.06]">
-                  <p className="text-white text-sm font-semibold truncate">{displayName}</p>
-                  <p className="text-slate-500 text-xs truncate">{user?.email}</p>
-                </div>
-                <div className="p-1.5">
-                  <button
-                    onClick={() => { setShowMenu(false); onLogout(); }}
-                    className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                {avatar ? (
+                  <img src={avatar} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center">
+                    <User size={14} className="text-blue-300" />
+                  </div>
+                )}
+                <span className="text-white text-sm font-medium max-w-[120px] truncate hidden sm:block">{displayName}</span>
+              </button>
+
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    className="absolute right-0 top-12 w-52 py-1.5 rounded-xl border border-white/10 shadow-2xl z-50"
+                    style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(20px)' }}
                   >
-                    <LogOut size={14} />
-                    Sign Out
-                  </button>
-                </div>
-              </motion.div>
+                    <div className="px-4 py-2.5 border-b border-white/[0.06]">
+                      <p className="text-white text-sm font-semibold truncate">{displayName}</p>
+                      <p className="text-slate-500 text-xs truncate">{user?.email}</p>
+                    </div>
+                    <div className="p-1.5">
+                      <button
+                        onClick={() => { setShowMenu(false); onLogout(); }}
+                        className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                      >
+                        <LogOut size={14} />
+                        Sign Out
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
+              )}
             </>
+          ) : (
+            <button
+               onClick={onOpenAuth}
+               className="px-5 py-2 min-w-[120px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-500/20"
+            >
+               Log in
+            </button>
           )}
         </div>
       </div>
@@ -1078,6 +1138,9 @@ export default function App() {
   const [page, setPage] = useState('landing');
   const [interviewSession, setInterviewSession] = useState(null);
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
+
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
 
   // ===== AUTH STATE =====
   const [session, setSession] = useState(null);
@@ -1108,7 +1171,32 @@ export default function App() {
 
   const handleAuthSuccess = (session) => {
     setSession(session);
+    setShowAuthModal(false);
   };
+
+  const requireAuth = (message) => {
+    if (!session) {
+      setAuthMessage(message);
+      setShowAuthModal(true);
+      return false;
+    }
+    return true;
+  };
+
+  useEffect(() => {
+    const handleRequireAuth = (e) => {
+      const { message } = e.detail;
+      if (!session) {
+        setAuthMessage(message || 'Please log in to continue.');
+        setShowAuthModal(true);
+      } else {
+        // If they are already logged in, dispatch success immediately
+        window.dispatchEvent(new CustomEvent('auth-success'));
+      }
+    };
+    window.addEventListener('require-auth', handleRequireAuth);
+    return () => window.removeEventListener('require-auth', handleRequireAuth);
+  }, [session]);
 
   const handleLogout = async () => {
     await signOut();
@@ -1119,6 +1207,7 @@ export default function App() {
 
   // ===== PAGE HANDLERS =====
   const handleStartInterview = (data) => {
+    if (!requireAuth("Sign up to save interview results and get detailed feedback.")) return;
     log('handleStartInterview called', data);
     setInterviewSession(data);
     setPage('interview');
@@ -1179,6 +1268,7 @@ export default function App() {
   };
 
   const handleStartResumeScorer = () => {
+    if (!requireAuth("Sign up to unlock advanced AI ATS checking and resume optimization.")) return;
     setPage('resume-scorer');
   };
 
@@ -1211,22 +1301,25 @@ export default function App() {
     );
   }
 
-  // ===== NOT AUTHENTICATED — SHOW AUTH PAGES =====
-  if (!session) {
-    return <AuthPages onAuthSuccess={handleAuthSuccess} />;
-  }
-
-  // ===== AUTHENTICATED — MAIN APP =====
+  // ===== MAIN APP =====
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950 relative">
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+        onAuthSuccess={handleAuthSuccess} 
+        message={authMessage} 
+      />
       {/* User Navbar */}
-      <UserNavbar user={session.user} onLogout={handleLogout} onHome={() => setPage('landing')} currentPage={page} />
+      <UserNavbar user={session?.user} onLogout={handleLogout} onHome={() => setPage('landing')} currentPage={page} onOpenAuth={() => { setAuthMessage('Welcome to InterVue AI'); setShowAuthModal(true); }} />
 
       <div className="pt-14">
         <AnimatePresence mode="wait">
           {page === 'landing' && (
             <motion.div key="landing" variants={pageVariants} initial="initial" animate="animate" exit="exit">
               <LandingPage
+                isAuthenticated={!!session}
+                userName={session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || session?.user?.email?.split('@')[0]}
                 onStartInterview={handleStartInterview}
                 onStartRapidFire={handleStartRapidFire}
                 onStartResumeScorer={handleStartResumeScorer}

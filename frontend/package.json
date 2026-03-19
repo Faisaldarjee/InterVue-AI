@@ -4,6 +4,9 @@
   "description": "Premium AI-Powered Interview Platform Frontend",
   "private": true,
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.97.0",
     "axios": "^1.6.0",
     "canvas-confetti": "^1.9.4",

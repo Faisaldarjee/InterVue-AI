@@ -1,603 +1,336 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     ArrowLeft, ArrowRight, Plus, X, Sparkles, Download, Loader,
     User, Briefcase, GraduationCap, Code2, FolderOpen, Check,
-    Mail, Phone, Linkedin, FileText, Calendar, MapPin, ExternalLink, Palette
+    Mail, Phone, Linkedin, FileText, MapPin, Eye, EyeOff, Layout, Globe, GripVertical
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
-import apiClient from './utils/apiClient';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-// ==================== TEMPLATES ====================
+import { useResumeState, EMPTY_EXP, EMPTY_EDU, EMPTY_PROJ } from './components/ResumeBuilder/hooks/useResumeState';
+import { Field, TextArea, StepHeader, MiniBtn, AddBtn } from './components/ResumeBuilder/components/FormInputs';
+import ResumePreview from './components/ResumeBuilder/templates/ResumePreview';
+
+const FontLoader = () => (
+    <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@300;400;600;700&family=Syne:wght@400;600;700;800&family=Fraunces:wght@300;400;700;900&family=Cabinet+Grotesk:wght@400;500;700;800;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; }
+    
+    @media (max-width: 1024px) {
+        .responsive-grid {
+            grid-template-columns: 1fr !important;
+        }
+        .main-container {
+            padding: 10px !important;
+        }
+        .hide-mobile {
+            display: none !important;
+        }
+    }
+
+    @keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .slide-up { animation: slideUp .4s cubic-bezier(.16,1,.3,1) both; }
+    .glow-btn { position: relative; overflow: hidden; transition: all .2s; }
+    .glow-btn::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, transparent 60%); opacity: 0; transition: opacity .2s; }
+    .glow-btn:hover::before { opacity: 1; }
+    .glow-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(99,102,241,.4); }
+    .preview-shadow { box-shadow: 0 40px 120px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.05); }
+    .input-field { transition: all .2s; background: rgba(255,255,255,.04); border: 1.5px solid rgba(255,255,255,.08); color: #f1f5f9; }
+    .input-field:focus { outline: none; border-color: #6366f1; background: rgba(99,102,241,.08); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .input-field::placeholder { color: rgba(148,163,184,.4); }
+    
+    /* PDF print overrides */
+    @media print {
+        body { background: white !important; }
+        .no-print { display: none !important; }
+    }
+  `}</style>
+);
+
 const TEMPLATES = {
-    modern: {
-        name: 'Modern',
-        desc: 'Gradient header, clean & bold',
-        color: '#3b82f6',
-        headerBg: 'linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%)',
-        headerText: '#ffffff',
-        accentColor: '#3b82f6',
-        bodyBg: '#ffffff',
-        textColor: '#1e293b',
-        subtextColor: '#64748b',
-        sectionBorder: '3px solid #3b82f6',
-    },
-    classic: {
-        name: 'Classic',
-        desc: 'Traditional & professional',
-        color: '#059669',
-        headerBg: '#ffffff',
-        headerText: '#111827',
-        accentColor: '#059669',
-        bodyBg: '#ffffff',
-        textColor: '#111827',
-        subtextColor: '#6b7280',
-        sectionBorder: '2px solid #d1d5db',
-    },
-    minimal: {
-        name: 'Minimal',
-        desc: 'Ultra-clean, whitespace',
-        color: '#8b5cf6',
-        headerBg: '#fafafa',
-        headerText: '#18181b',
-        accentColor: '#8b5cf6',
-        bodyBg: '#ffffff',
-        textColor: '#27272a',
-        subtextColor: '#71717a',
-        sectionBorder: '1px solid #e4e4e7',
-    },
+    noir_executive: { name: 'Noir Executive', desc: 'Dark luxury sidebar', preview: ['#0f0f0f', '#1a1a1a', '#c9a84c'] },
+    swiss_modern: { name: 'Swiss Grid', desc: 'Crisp typographic grid', preview: ['#fafafa', '#111', '#e63946'] },
+    gradient_pro: { name: 'Gradient Pro', desc: 'Bold color header', preview: ['#7c3aed', '#6366f1', '#f8f9ff'] },
+    editorial: { name: 'Editorial', desc: 'Magazine-style serif', preview: ['#fffef9', '#0a2463', '#d4a853'] },
+    minimal_ink: { name: 'Minimal Ink', desc: 'Pure black & white', preview: ['#ffffff', '#000000', '#666666'] },
+    aurora: { name: 'Aurora', desc: 'Soft gradient elegance', preview: ['#f0f9ff', '#0891b2', '#7c3aed'] }
 };
 
 const STEPS = [
-    { id: 1, label: 'Personal', icon: User },
-    { id: 2, label: 'Experience', icon: Briefcase },
-    { id: 3, label: 'Education', icon: GraduationCap },
-    { id: 4, label: 'Skills', icon: Code2 },
-    { id: 5, label: 'Projects', icon: FolderOpen },
+    { id: 1, label: 'Profile', icon: User, color: '#6366f1' },
+    { id: 2, label: 'Experience', icon: Briefcase, color: '#8b5cf6' },
+    { id: 3, label: 'Education', icon: GraduationCap, color: '#06b6d4' },
+    { id: 4, label: 'Skills', icon: Code2, color: '#10b981' },
+    { id: 5, label: 'Projects', icon: FolderOpen, color: '#f59e0b' }
 ];
 
-const EMPTY_EXPERIENCE = { company: '', role: '', startDate: '', endDate: '', current: false, bullets: [''] };
-const EMPTY_EDUCATION = { degree: '', university: '', year: '', gpa: '' };
-const EMPTY_PROJECT = { title: '', description: '', techStack: '', link: '' };
+async function aiEnhanceBullet(bullet, role, jobDescription) {
+    try {
+        const res = await fetch('http://localhost:8000/api/enhance-bullet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bullet, job_role: role || 'Professional', job_description: jobDescription || '' })
+        });
+        if (!res.ok) throw new Error('API failed');
+        const data = await res.json();
+        return data.enhanced || bullet;
+    } catch {
+        return bullet;
+    }
+}
 
-// ==================== MAIN COMPONENT ====================
+function SortableItemWrapper({ id, onRemove, children }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 2 : 1, position: 'relative' };
+
+    return (
+        <div ref={setNodeRef} style={style}>
+            <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 14, padding: '20px', position: 'relative', marginBottom: 16 }}>
+                <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 6 }}>
+                    <div {...listeners} {...attributes} style={{ cursor: 'grab', display: 'flex', alignItems: 'center', padding: '5px', color: 'rgba(255,255,255,0.4)' }}>
+                        <GripVertical size={14} />
+                    </div>
+                    {onRemove && <MiniBtn onClick={onRemove} danger title="Remove"><X size={12} /></MiniBtn>}
+                </div>
+                {children}
+            </div>
+        </div>
+    );
+}
+
 export default function ResumeBuilder({ onBack }) {
     const [step, setStep] = useState(1);
-    const [template, setTemplate] = useState('modern');
+    const [template, setTemplate] = useState('noir_executive');
     const [showPreview, setShowPreview] = useState(false);
+    const [enhancingIdx, setEnhancingIdx] = useState(null);
+    const [downloading, setDownloading] = useState(false);
+    const [skillInput, setSkillInput] = useState('');
     const previewRef = useRef(null);
 
-    // Form Data
-    const [personal, setPersonal] = useState({
-        name: '', email: '', phone: '', linkedin: '', location: '', summary: ''
-    });
-    const [experiences, setExperiences] = useState([{ ...EMPTY_EXPERIENCE }]);
-    const [educations, setEducations] = useState([{ ...EMPTY_EDUCATION }]);
-    const [skills, setSkills] = useState([]);
-    const [skillInput, setSkillInput] = useState('');
-    const [projects, setProjects] = useState([{ ...EMPTY_PROJECT }]);
-    const [jobRole, setJobRole] = useState('');
+    const { personal, setPersonal, jobRole, setJobRole, jobDescription, setJobDescription, experiences, setExps, educations, setEdus, skills, setSkills, projects, setProjs } = useResumeState();
 
-    // AI State
-    const [enhancingIdx, setEnhancingIdx] = useState(null); // { expIdx, bulletIdx }
-    const [downloading, setDownloading] = useState(false);
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
 
-    const t = TEMPLATES[template];
-
-    // ========== HANDLERS ==========
-    const updatePersonal = (field, value) => setPersonal(p => ({ ...p, [field]: value }));
-
-    const updateExperience = (idx, field, value) => {
-        const copy = [...experiences];
-        copy[idx] = { ...copy[idx], [field]: value };
-        setExperiences(copy);
-    };
-    const addExperience = () => setExperiences(prev => [...prev, { ...EMPTY_EXPERIENCE }]);
-    const removeExperience = (idx) => setExperiences(prev => prev.filter((_, i) => i !== idx));
-
-    const updateBullet = (expIdx, bulletIdx, value) => {
-        const copy = [...experiences];
-        copy[expIdx].bullets[bulletIdx] = value;
-        setExperiences(copy);
-    };
-    const addBullet = (expIdx) => {
-        const copy = [...experiences];
-        copy[expIdx].bullets.push('');
-        setExperiences(copy);
-    };
-    const removeBullet = (expIdx, bulletIdx) => {
-        const copy = [...experiences];
-        copy[expIdx].bullets = copy[expIdx].bullets.filter((_, i) => i !== bulletIdx);
-        setExperiences(copy);
-    };
-
-    const enhanceBullet = async (expIdx, bulletIdx) => {
-        const bullet = experiences[expIdx].bullets[bulletIdx];
-        if (!bullet || bullet.trim().length < 5) return;
-        setEnhancingIdx({ expIdx, bulletIdx });
-        try {
-            const { data } = await apiClient.post('/api/enhance-bullet', {
-                bullet: bullet.trim(),
-                job_role: jobRole || experiences[expIdx].role || ''
-            });
-            if (data.enhanced) {
-                updateBullet(expIdx, bulletIdx, data.enhanced);
-            }
-        } catch (err) {
-            console.error('Enhance failed', err);
-        } finally {
-            setEnhancingIdx(null);
+    const handleDragEnd = (event, items, setItems) => {
+        const { active, over } = event;
+        if (active.id !== over?.id) {
+            const oldIndex = items.findIndex(i => i.id === active.id);
+            const newIndex = items.findIndex(i => i.id === over.id);
+            setItems(arrayMove(items, oldIndex, newIndex));
         }
     };
 
-    const updateEducation = (idx, field, value) => {
-        const copy = [...educations];
-        copy[idx] = { ...copy[idx], [field]: value };
-        setEducations(copy);
-    };
-    const addEducation = () => setEducations(prev => [...prev, { ...EMPTY_EDUCATION }]);
-    const removeEducation = (idx) => setEducations(prev => prev.filter((_, i) => i !== idx));
+    const upPersonal = (f, v) => setPersonal(p => ({ ...p, [f]: v }));
+    const upExp = (id, f, v) => setExps(prev => prev.map(e => e.id === id ? { ...e, [f]: v } : e));
+    const upBullet = (id, bi, v) => setExps(prev => prev.map(e => {
+        if (e.id === id) { const nb = [...e.bullets]; nb[bi] = v; return { ...e, bullets: nb }; }
+        return e;
+    }));
+    const addBullet = (id) => setExps(prev => prev.map(e => e.id === id ? { ...e, bullets: [...e.bullets, ''] } : e));
+    const remBullet = (id, bi) => setExps(prev => prev.map(e => {
+        if (e.id === id) { const nb = e.bullets.filter((_, i) => i !== bi); return { ...e, bullets: nb }; }
+        return e;
+    }));
 
-    const addSkill = () => {
-        const s = skillInput.trim();
-        if (s && !skills.includes(s)) {
-            setSkills(prev => [...prev, s]);
-            setSkillInput('');
-        }
+    const enhanceBullet = async (id, bi) => {
+        const exp = experiences.find(e => e.id === id);
+        const b = exp.bullets[bi];
+        if (!b || b.trim().length < 5) return;
+        setEnhancingIdx({ id, bi });
+        const enhanced = await aiEnhanceBullet(b, jobRole || exp.role, jobDescription);
+        upBullet(id, bi, enhanced);
+        setEnhancingIdx(null);
     };
-    const removeSkill = (idx) => setSkills(prev => prev.filter((_, i) => i !== idx));
 
-    const updateProject = (idx, field, value) => {
-        const copy = [...projects];
-        copy[idx] = { ...copy[idx], [field]: value };
-        setProjects(copy);
-    };
-    const addProject = () => setProjects(prev => [...prev, { ...EMPTY_PROJECT }]);
-    const removeProject = (idx) => setProjects(prev => prev.filter((_, i) => i !== idx));
+    const upEdu = (id, f, v) => setEdus(prev => prev.map(e => e.id === id ? { ...e, [f]: v } : e));
+    const addSkill = () => { const s = skillInput.trim(); if (s && !skills.includes(s)) { setSkills(p => [...p, s]); setSkillInput(''); } };
+    const upProj = (id, f, v) => setProjs(prev => prev.map(p => p.id === id ? { ...p, [f]: v } : p));
 
     const downloadPDF = async () => {
-        if (!previewRef.current) return;
-        setDownloading(true);
-        try {
-            const opt = {
-                margin: 0,
-                filename: `${personal.name || 'Resume'}_Resume.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-            await html2pdf().set(opt).from(previewRef.current).save();
-        } catch (err) {
-            console.error('PDF download failed', err);
-        } finally {
+        if (!previewRef.current || !personal.name) return;
+
+        const onAuthSuccess = async () => {
+            window.removeEventListener('auth-success', onAuthSuccess);
+            setDownloading(true);
+            try {
+                const { default: html2pdf } = await import('html2pdf.js');
+                await html2pdf().set({
+                    margin: 0, filename: `${personal.name.replace(/\s+/g, '_')}_Resume.pdf`,
+                    image: { type: 'jpeg', quality: .98 },
+                    html2canvas: { scale: 2, useCORS: true, windowWidth: 794 }, // A4 width at 96dpi approx
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).from(previewRef.current).save();
+            } catch (e) { console.error(e); }
             setDownloading(false);
-        }
+        };
+
+        window.addEventListener('auth-success', onAuthSuccess);
+        window.dispatchEvent(new CustomEvent('require-auth', { 
+            detail: { message: 'Create a free account to download your premium resume PDF.' } 
+        }));
     };
 
-    // ========== STEP CONTENT ==========
     const renderStep = () => {
         switch (step) {
-            case 1:
-                return (
-                    <div className="space-y-5 animate-fadeIn">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                                <User size={20} className="text-blue-400" />
-                            </div>
-                            Personal Information
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InputField icon={<User size={16} />} label="Full Name" value={personal.name} onChange={v => updatePersonal('name', v)} placeholder="Faisal Darjee" />
-                            <InputField icon={<Mail size={16} />} label="Email" value={personal.email} onChange={v => updatePersonal('email', v)} placeholder="faisal@example.com" type="email" />
-                            <InputField icon={<Phone size={16} />} label="Phone" value={personal.phone} onChange={v => updatePersonal('phone', v)} placeholder="+91 9876543210" />
-                            <InputField icon={<Linkedin size={16} />} label="LinkedIn URL" value={personal.linkedin} onChange={v => updatePersonal('linkedin', v)} placeholder="linkedin.com/in/faisal" />
-                            <InputField icon={<MapPin size={16} />} label="Location" value={personal.location} onChange={v => updatePersonal('location', v)} placeholder="Mumbai, India" />
-                            <InputField icon={<Briefcase size={16} />} label="Target Job Role" value={jobRole} onChange={v => setJobRole(v)} placeholder="Full Stack Developer" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-slate-300 mb-2">Professional Summary</label>
-                            <textarea
-                                value={personal.summary}
-                                onChange={e => updatePersonal('summary', e.target.value)}
-                                placeholder="Brief 2-3 line summary of your experience and goals..."
-                                rows={3}
-                                className="w-full bg-slate-800/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition resize-none text-sm"
-                            />
-                        </div>
+            case 1: return (
+                <div className="slide-up">
+                    <StepHeader icon={<User size={18} />} title="Personal Info" subtitle="Let's start with the basics" color="#6366f1" />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 14 }}>
+                        <Field label="Full Name" value={personal.name} onChange={v => upPersonal('name', v)} placeholder="Aryan Sharma" icon={<User size={14} />} />
+                        <Field label="Target Role" value={jobRole} onChange={setJobRole} placeholder="Full Stack Developer" icon={<Briefcase size={14} />} />
+                        <Field label="Email" value={personal.email} onChange={v => upPersonal('email', v)} placeholder="aryan@email.com" type="email" icon={<Mail size={14} />} />
+                        <Field label="Phone" value={personal.phone} onChange={v => upPersonal('phone', v)} placeholder="+91 98765 43210" icon={<Phone size={14} />} />
+                        <Field label="Location" value={personal.location} onChange={v => upPersonal('location', v)} placeholder="Mumbai, India" icon={<MapPin size={14} />} />
+                        <Field label="LinkedIn" value={personal.linkedin} onChange={v => upPersonal('linkedin', v)} placeholder="linkedin.com/..." icon={<Linkedin size={14} />} />
                     </div>
-                );
-
-            case 2:
-                return (
-                    <div className="space-y-5 animate-fadeIn">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                                <Briefcase size={20} className="text-purple-400" />
-                            </div>
-                            Work Experience
-                        </h2>
-                        {experiences.map((exp, expIdx) => (
-                            <div key={expIdx} className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-5 space-y-4 relative group">
-                                {experiences.length > 1 && (
-                                    <button onClick={() => removeExperience(expIdx)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition opacity-0 group-hover:opacity-100">
-                                        <X size={14} />
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <InputField label="Company" value={exp.company} onChange={v => updateExperience(expIdx, 'company', v)} placeholder="Google" />
-                                    <InputField label="Job Title" value={exp.role} onChange={v => updateExperience(expIdx, 'role', v)} placeholder="Software Engineer" />
-                                    <InputField label="Start Date" value={exp.startDate} onChange={v => updateExperience(expIdx, 'startDate', v)} placeholder="Jan 2023" />
-                                    <InputField label="End Date" value={exp.endDate} onChange={v => updateExperience(expIdx, 'endDate', v)} placeholder="Present" disabled={exp.current} />
-                                </div>
-                                {/* Bullets */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Key Responsibilities & Achievements</label>
-                                    {exp.bullets.map((bullet, bIdx) => (
-                                        <div key={bIdx} className="flex items-start gap-2">
-                                            <span className="text-slate-500 mt-3 text-xs">•</span>
-                                            <textarea
-                                                value={bullet}
-                                                onChange={e => updateBullet(expIdx, bIdx, e.target.value)}
-                                                placeholder="Describe what you did..."
-                                                rows={2}
-                                                className="flex-1 bg-slate-700/50 border border-slate-600/50 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm transition resize-none"
-                                            />
-                                            <button
-                                                onClick={() => enhanceBullet(expIdx, bIdx)}
-                                                disabled={enhancingIdx?.expIdx === expIdx && enhancingIdx?.bulletIdx === bIdx}
-                                                className="mt-1 p-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition disabled:opacity-50 flex-shrink-0"
-                                                title="AI Enhance"
-                                            >
-                                                {enhancingIdx?.expIdx === expIdx && enhancingIdx?.bulletIdx === bIdx
-                                                    ? <Loader size={14} className="animate-spin" />
-                                                    : <Sparkles size={14} />}
-                                            </button>
-                                            {exp.bullets.length > 1 && (
-                                                <button onClick={() => removeBullet(expIdx, bIdx)} className="mt-1 p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition flex-shrink-0">
-                                                    <X size={14} />
+                    <TextArea label="Target Job Description (For AI Auto-Tailoring)" value={jobDescription} onChange={setJobDescription} placeholder="Paste the job description you are aiming for. AI will use this to automatically tailor your bullet points..." rows={3} />
+                    <div style={{height: 14}}/>
+                    <TextArea label="Professional Summary" value={personal.summary} onChange={v => upPersonal('summary', v)} placeholder="2–3 lines about who you are and what makes you stand out..." rows={3} />
+                </div>
+            );
+            case 2: return (
+                <div className="slide-up">
+                    <StepHeader icon={<Briefcase size={18} />} title="Work Experience" subtitle="Drag to reorder" color="#8b5cf6" />
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, experiences, setExps)}>
+                        <SortableContext items={experiences.map(e => e.id)} strategy={verticalListSortingStrategy}>
+                            {experiences.map(exp => (
+                                <SortableItemWrapper key={exp.id} id={exp.id} onRemove={experiences.length > 1 ? () => setExps(p => p.filter(x => x.id !== exp.id)) : null}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
+                                        <Field label="Company" value={exp.company} onChange={v => upExp(exp.id, 'company', v)} placeholder="Google" />
+                                        <Field label="Job Title" value={exp.role} onChange={v => upExp(exp.id, 'role', v)} placeholder="Software Engineer" />
+                                        <Field label="Start Date" value={exp.startDate} onChange={v => upExp(exp.id, 'startDate', v)} placeholder="Jan 2023" />
+                                        <Field label="End Date" value={exp.endDate} onChange={v => upExp(exp.id, 'endDate', v)} placeholder="Present" />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: 11, fontWeight: 700, color: 'rgba(148,163,184,.6)', letterSpacing: '1px', textTransform: 'uppercase', display: 'block', marginBottom: 10 }}>Achievements</label>
+                                        {exp.bullets.map((bullet, bi) => (
+                                            <div key={bi} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                                                <span style={{ color: 'rgba(99,102,241,.6)', marginTop: 10, fontSize: 16 }}>›</span>
+                                                <TextArea value={bullet} onChange={v => upBullet(exp.id, bi, v)} placeholder="Action + Impact (e.g. Increased speed by 20%)" rows={2} />
+                                                <button onClick={() => enhanceBullet(exp.id, bi)} disabled={enhancingIdx?.id === exp.id && enhancingIdx?.bi === bi} title="AI Enhance"
+                                                    style={{ marginTop: 4, padding: '7px 10px', borderRadius: 8, border: '1px solid rgba(245,158,11,.3)', background: 'rgba(245,158,11,.08)', color: '#f59e0b', cursor: 'pointer', display: 'flex' }}>
+                                                    {enhancingIdx?.id === exp.id && enhancingIdx?.bi === bi ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
                                                 </button>
-                                            )}
-                                        </div>
-                                    ))}
-                                    <button onClick={() => addBullet(expIdx)} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mt-1 transition">
-                                        <Plus size={12} /> Add Bullet
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                        <button onClick={addExperience} className="w-full py-3 border-2 border-dashed border-slate-600 hover:border-blue-500/50 rounded-xl text-slate-400 hover:text-blue-400 transition flex items-center justify-center gap-2 text-sm font-medium">
-                            <Plus size={16} /> Add Another Experience
-                        </button>
-                    </div>
-                );
-
-            case 3:
-                return (
-                    <div className="space-y-5 animate-fadeIn">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                                <GraduationCap size={20} className="text-green-400" />
-                            </div>
-                            Education
-                        </h2>
-                        {educations.map((edu, idx) => (
-                            <div key={idx} className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-5 space-y-4 relative group">
-                                {educations.length > 1 && (
-                                    <button onClick={() => removeEducation(idx)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition opacity-0 group-hover:opacity-100">
-                                        <X size={14} />
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <InputField label="Degree" value={edu.degree} onChange={v => updateEducation(idx, 'degree', v)} placeholder="B.Tech Computer Science" />
-                                    <InputField label="University / School" value={edu.university} onChange={v => updateEducation(idx, 'university', v)} placeholder="IIT Bombay" />
-                                    <InputField label="Year" value={edu.year} onChange={v => updateEducation(idx, 'year', v)} placeholder="2024" />
-                                    <InputField label="GPA (optional)" value={edu.gpa} onChange={v => updateEducation(idx, 'gpa', v)} placeholder="9.1 / 10" />
-                                </div>
-                            </div>
-                        ))}
-                        <button onClick={addEducation} className="w-full py-3 border-2 border-dashed border-slate-600 hover:border-green-500/50 rounded-xl text-slate-400 hover:text-green-400 transition flex items-center justify-center gap-2 text-sm font-medium">
-                            <Plus size={16} /> Add Another Education
-                        </button>
-                    </div>
-                );
-
-            case 4:
-                return (
-                    <div className="space-y-5 animate-fadeIn">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                                <Code2 size={20} className="text-cyan-400" />
-                            </div>
-                            Skills
-                        </h2>
-                        <div className="flex gap-2">
-                            <input
-                                value={skillInput}
-                                onChange={e => setSkillInput(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSkill())}
-                                placeholder="Type a skill and press Enter..."
-                                className="flex-1 bg-slate-800/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition text-sm"
-                            />
-                            <button onClick={addSkill} className="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-medium transition text-sm">
-                                Add
-                            </button>
-                        </div>
-                        <div className="flex flex-wrap gap-2 min-h-[60px]">
-                            {skills.length === 0 && <p className="text-slate-500 text-sm italic">No skills added yet. Start typing above!</p>}
-                            {skills.map((skill, idx) => (
-                                <span
-                                    key={idx}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-500/15 to-blue-500/15 border border-cyan-500/30 rounded-full text-cyan-300 text-sm font-medium group hover:border-cyan-400/50 transition"
-                                >
-                                    {skill}
-                                    <button onClick={() => removeSkill(idx)} className="p-0.5 rounded-full hover:bg-red-500/20 hover:text-red-400 transition opacity-0 group-hover:opacity-100">
-                                        <X size={12} />
-                                    </button>
-                                </span>
+                                                {exp.bullets.length > 1 && <button onClick={() => remBullet(exp.id, bi)} style={{ marginTop: 4, padding: '7px', borderRadius: 8, border: '1px solid rgba(239,68,68,.2)', background: 'rgba(239,68,68,.06)', color: 'rgba(239,68,68,.7)', cursor: 'pointer' }}><X size={12} /></button>}
+                                            </div>
+                                        ))}
+                                        <button onClick={() => addBullet(exp.id)} style={{ fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}><Plus size={12}/> Add bullet</button>
+                                    </div>
+                                </SortableItemWrapper>
                             ))}
-                        </div>
+                        </SortableContext>
+                    </DndContext>
+                    <AddBtn onClick={() => setExps(p => [...p, EMPTY_EXP()])} label="Add Experience" color="#8b5cf6" />
+                </div>
+            );
+            case 3: return (
+                <div className="slide-up">
+                    <StepHeader icon={<GraduationCap size={18} />} title="Education" subtitle="Drag to reorder" color="#06b6d4" />
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, educations, setEdus)}>
+                        <SortableContext items={educations.map(e => e.id)} strategy={verticalListSortingStrategy}>
+                            {educations.map((edu) => (
+                                <SortableItemWrapper key={edu.id} id={edu.id} onRemove={educations.length > 1 ? () => setEdus(p => p.filter(x => x.id !== edu.id)) : null}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                                        <Field label="Degree / Course" value={edu.degree} onChange={v => upEdu(edu.id, 'degree', v)} placeholder="B.Tech CS" />
+                                        <Field label="University / School" value={edu.university} onChange={v => upEdu(edu.id, 'university', v)} placeholder="IIT Bombay" />
+                                        <Field label="Graduation Year" value={edu.year} onChange={v => upEdu(edu.id, 'year', v)} placeholder="2024" />
+                                        <Field label="GPA" value={edu.gpa} onChange={v => upEdu(edu.id, 'gpa', v)} placeholder="9.2 / 10" />
+                                    </div>
+                                </SortableItemWrapper>
+                            ))}
+                        </SortableContext>
+                    </DndContext>
+                    <AddBtn onClick={() => setEdus(p => [...p, EMPTY_EDU()])} label="Add Education" color="#06b6d4" />
+                </div>
+            );
+            case 4: return (
+                <div className="slide-up">
+                    <StepHeader icon={<Code2 size={18} />} title="Skills" subtitle="Tech & tools" color="#10b981" />
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <input value={skillInput} onChange={e => setSkillInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSkill())} placeholder="Type skill + Enter" className="input-field" style={{ flex: 1, padding: '11px 16px', borderRadius: 10, fontSize: 13.5 }} />
+                        <button onClick={addSkill} className="glow-btn" style={{ padding: '11px 20px', borderRadius: 10, background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700 }}>Add</button>
                     </div>
-                );
-
-            case 5:
-                return (
-                    <div className="space-y-5 animate-fadeIn">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                                <FolderOpen size={20} className="text-amber-400" />
-                            </div>
-                            Projects
-                        </h2>
-                        {projects.map((proj, idx) => (
-                            <div key={idx} className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-5 space-y-4 relative group">
-                                {projects.length > 1 && (
-                                    <button onClick={() => removeProject(idx)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition opacity-0 group-hover:opacity-100">
-                                        <X size={14} />
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <InputField label="Project Title" value={proj.title} onChange={v => updateProject(idx, 'title', v)} placeholder="InterVue AI" />
-                                    <InputField label="Tech Stack" value={proj.techStack} onChange={v => updateProject(idx, 'techStack', v)} placeholder="React, Python, Gemini AI" />
-                                    <InputField label="Live Link (optional)" value={proj.link} onChange={v => updateProject(idx, 'link', v)} placeholder="https://github.com/..." className="md:col-span-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-300 mb-2">Description</label>
-                                    <textarea
-                                        value={proj.description}
-                                        onChange={e => updateProject(idx, 'description', e.target.value)}
-                                        placeholder="What does this project do? Key features..."
-                                        rows={2}
-                                        className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm transition resize-none"
-                                    />
-                                </div>
-                            </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+                        {skills.map((s, i) => (
+                            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 100, background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', color: '#34d399', fontSize: 13, fontWeight: 600 }}>
+                                {s} <button onClick={() => setSkills(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(52,211,153,.6)', padding: 0 }}><X size={12} /></button>
+                            </span>
                         ))}
-                        <button onClick={addProject} className="w-full py-3 border-2 border-dashed border-slate-600 hover:border-amber-500/50 rounded-xl text-slate-400 hover:text-amber-400 transition flex items-center justify-center gap-2 text-sm font-medium">
-                            <Plus size={16} /> Add Another Project
-                        </button>
                     </div>
-                );
-
+                </div>
+            );
+            case 5: return (
+                <div className="slide-up">
+                    <StepHeader icon={<FolderOpen size={18} />} title="Projects" subtitle="Drag to reorder" color="#f59e0b" />
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, projects, setProjs)}>
+                        <SortableContext items={projects.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                            {projects.map((proj) => (
+                                <SortableItemWrapper key={proj.id} id={proj.id} onRemove={projects.length > 1 ? () => setProjs(p => p.filter(x => x.id !== proj.id)) : null}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                                        <Field label="Project Name" value={proj.title} onChange={v => upProj(proj.id, 'title', v)} placeholder="InterVue AI" />
+                                        <Field label="Tech Stack" value={proj.techStack} onChange={v => upProj(proj.id, 'techStack', v)} placeholder="React, Node.js" />
+                                    </div>
+                                    <Field label="Live Link" value={proj.link} onChange={v => upProj(proj.id, 'link', v)} placeholder="https://..." icon={<Globe size={13} />} />
+                                    <div style={{ marginTop: 12 }}>
+                                        <TextArea label="Description" value={proj.description} onChange={v => upProj(proj.id, 'description', v)} rows={2} />
+                                    </div>
+                                </SortableItemWrapper>
+                            ))}
+                        </SortableContext>
+                    </DndContext>
+                    <AddBtn onClick={() => setProjs(p => [...p, EMPTY_PROJ()])} label="Add Project" color="#f59e0b" />
+                </div>
+            );
             default: return null;
         }
     };
 
-    // ========== LIVE PREVIEW ==========
-    const renderPreview = () => {
-        const hasSummary = personal.summary?.trim();
-        const hasExperiences = experiences.some(e => e.company || e.role);
-        const hasEducations = educations.some(e => e.degree || e.university);
-        const hasSkills = skills.length > 0;
-        const hasProjects = projects.some(p => p.title);
-
-        return (
-            <div
-                ref={previewRef}
-                style={{
-                    background: t.bodyBg,
-                    color: t.textColor,
-                    fontFamily: "'Inter', 'Segoe UI', sans-serif",
-                    fontSize: '11px',
-                    lineHeight: '1.5',
-                    width: '100%',
-                    maxWidth: '210mm',
-                    minHeight: '297mm',
-                }}
-            >
-                {/* Header */}
-                <div style={{
-                    background: t.headerBg,
-                    color: t.headerText,
-                    padding: template === 'modern' ? '28px 32px' : '20px 32px',
-                    ...(template === 'classic' ? { borderBottom: `3px solid ${t.accentColor}` } : {}),
-                }}>
-                    <h1 style={{
-                        fontSize: template === 'modern' ? '26px' : '24px',
-                        fontWeight: 800,
-                        margin: 0,
-                        letterSpacing: '-0.5px',
-                        color: t.headerText,
-                    }}>
-                        {personal.name || 'Your Name'}
-                    </h1>
-                    {jobRole && (
-                        <p style={{
-                            fontSize: '13px',
-                            color: template === 'modern' ? 'rgba(255,255,255,0.8)' : t.accentColor,
-                            marginTop: '2px',
-                            fontWeight: 500,
-                        }}>
-                            {jobRole}
-                        </p>
-                    )}
-                    <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '14px',
-                        marginTop: '10px',
-                        fontSize: '10.5px',
-                        color: template === 'modern' ? 'rgba(255,255,255,0.7)' : t.subtextColor,
-                    }}>
-                        {personal.email && <span>✉ {personal.email}</span>}
-                        {personal.phone && <span>☎ {personal.phone}</span>}
-                        {personal.location && <span>📍 {personal.location}</span>}
-                        {personal.linkedin && <span>🔗 {personal.linkedin}</span>}
-                    </div>
-                </div>
-
-                {/* Body */}
-                <div style={{ padding: '20px 32px' }}>
-                    {/* Summary */}
-                    {hasSummary && (
-                        <div style={{ marginBottom: '18px' }}>
-                            <h2 style={{ fontSize: '13px', fontWeight: 700, color: t.accentColor, textTransform: 'uppercase', letterSpacing: '1px', borderBottom: t.sectionBorder, paddingBottom: '4px', marginBottom: '8px' }}>
-                                Professional Summary
-                            </h2>
-                            <p style={{ fontSize: '11px', color: t.subtextColor, lineHeight: '1.6' }}>{personal.summary}</p>
-                        </div>
-                    )}
-
-                    {/* Experience */}
-                    {hasExperiences && (
-                        <div style={{ marginBottom: '18px' }}>
-                            <h2 style={{ fontSize: '13px', fontWeight: 700, color: t.accentColor, textTransform: 'uppercase', letterSpacing: '1px', borderBottom: t.sectionBorder, paddingBottom: '4px', marginBottom: '8px' }}>
-                                Experience
-                            </h2>
-                            {experiences.filter(e => e.company || e.role).map((exp, i) => (
-                                <div key={i} style={{ marginBottom: '12px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                        <strong style={{ fontSize: '12px', color: t.textColor }}>{exp.role || 'Role'}</strong>
-                                        <span style={{ fontSize: '10px', color: t.subtextColor }}>{exp.startDate}{exp.startDate && (exp.endDate || exp.current) ? ' – ' : ''}{exp.current ? 'Present' : exp.endDate}</span>
-                                    </div>
-                                    <p style={{ fontSize: '11px', color: t.accentColor, fontWeight: 500 }}>{exp.company}</p>
-                                    <ul style={{ paddingLeft: '16px', marginTop: '4px' }}>
-                                        {exp.bullets.filter(b => b.trim()).map((b, j) => (
-                                            <li key={j} style={{ fontSize: '10.5px', color: t.subtextColor, marginBottom: '2px' }}>{b}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Education */}
-                    {hasEducations && (
-                        <div style={{ marginBottom: '18px' }}>
-                            <h2 style={{ fontSize: '13px', fontWeight: 700, color: t.accentColor, textTransform: 'uppercase', letterSpacing: '1px', borderBottom: t.sectionBorder, paddingBottom: '4px', marginBottom: '8px' }}>
-                                Education
-                            </h2>
-                            {educations.filter(e => e.degree || e.university).map((edu, i) => (
-                                <div key={i} style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                    <div>
-                                        <strong style={{ fontSize: '12px', color: t.textColor }}>{edu.degree}</strong>
-                                        <p style={{ fontSize: '11px', color: t.accentColor, fontWeight: 500 }}>{edu.university}</p>
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        {edu.year && <span style={{ fontSize: '10px', color: t.subtextColor }}>{edu.year}</span>}
-                                        {edu.gpa && <p style={{ fontSize: '10px', color: t.subtextColor }}>GPA: {edu.gpa}</p>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Skills */}
-                    {hasSkills && (
-                        <div style={{ marginBottom: '18px' }}>
-                            <h2 style={{ fontSize: '13px', fontWeight: 700, color: t.accentColor, textTransform: 'uppercase', letterSpacing: '1px', borderBottom: t.sectionBorder, paddingBottom: '4px', marginBottom: '8px' }}>
-                                Skills
-                            </h2>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {skills.map((s, i) => (
-                                    <span key={i} style={{
-                                        fontSize: '10px',
-                                        padding: '3px 10px',
-                                        borderRadius: '12px',
-                                        background: template === 'modern' ? `${t.accentColor}15` : '#f3f4f6',
-                                        color: t.accentColor,
-                                        border: `1px solid ${t.accentColor}30`,
-                                        fontWeight: 500,
-                                    }}>
-                                        {s}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Projects */}
-                    {hasProjects && (
-                        <div>
-                            <h2 style={{ fontSize: '13px', fontWeight: 700, color: t.accentColor, textTransform: 'uppercase', letterSpacing: '1px', borderBottom: t.sectionBorder, paddingBottom: '4px', marginBottom: '8px' }}>
-                                Projects
-                            </h2>
-                            {projects.filter(p => p.title).map((proj, i) => (
-                                <div key={i} style={{ marginBottom: '10px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                        <strong style={{ fontSize: '12px', color: t.textColor }}>{proj.title}</strong>
-                                        {proj.link && <a href={proj.link} style={{ fontSize: '10px', color: t.accentColor }}>🔗 Link</a>}
-                                    </div>
-                                    {proj.techStack && <p style={{ fontSize: '10px', color: t.accentColor, fontWeight: 500 }}>{proj.techStack}</p>}
-                                    {proj.description && <p style={{ fontSize: '10.5px', color: t.subtextColor, marginTop: '2px' }}>{proj.description}</p>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    // ==================== RENDER ====================
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950/40 to-slate-900">
-            {/* Top Bar */}
-            <div className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
-                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <button onClick={onBack} className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm font-medium">
-                        <ArrowLeft size={18} /> Back Home
+        <div className="no-print" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #09090b 0%, #0f0f23 50%, #09090b 100%)', fontFamily: "'DM Sans', sans-serif", position: 'relative', overflow: 'hidden' }}>
+            <FontLoader />
+            <div style={{ position: 'fixed', top: '10%', left: '5%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ position: 'fixed', bottom: '10%', right: '5%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+            <div style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(24px)', background: 'rgba(9,9,11,.85)', borderBottom: '1px solid rgba(255,255,255,.06)', padding: '0 24px' }}>
+                <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
+                    <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'rgba(148,163,184,.7)', cursor: 'pointer', fontSize: 13 }}>
+                        <ArrowLeft size={16} /> <span className="hide-mobile">Back</span>
                     </button>
-                    <h1 className="text-white font-bold flex items-center gap-2">
-                        <FileText size={18} className="text-blue-400" />
-                        Resume Builder
-                    </h1>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowPreview(!showPreview)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition lg:hidden ${showPreview ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                        >
-                            {showPreview ? 'Edit' : 'Preview'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={14} color="#fff" /></div>
+                        <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>ResumeFlow</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button onClick={() => setShowPreview(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)', color: '#cbd5e1', cursor: 'pointer', fontSize: 12.5 }}>
+                            {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
+                            <span className="hide-mobile">{showPreview ? 'Edit' : 'Preview'}</span>
                         </button>
-                        <button
-                            onClick={downloadPDF}
-                            disabled={downloading || !personal.name}
-                            className="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-lg text-sm font-bold transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {downloading ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-                            {downloading ? 'Generating...' : 'Download PDF'}
+                        <button onClick={downloadPDF} disabled={downloading || !personal.name} className="glow-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 18px', borderRadius: 8, background: downloading ? 'rgba(16,185,129,.3)' : 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13, opacity: !personal.name ? .4 : 1 }}>
+                            {downloading ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />}
+                            <span className="hide-mobile">{downloading ? 'Generating…' : 'Download PDF'}</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Step Indicators */}
-            <div className="max-w-7xl mx-auto px-4 py-4">
-                <div className="flex items-center justify-center gap-1 sm:gap-2">
+            <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 24px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, overflowX: 'auto', paddingBottom: 10 }}>
                     {STEPS.map((s, idx) => {
-                        const StepIcon = s.icon;
                         const isActive = step === s.id;
                         const isDone = step > s.id;
                         return (
                             <React.Fragment key={s.id}>
-                                {idx > 0 && <div className={`h-0.5 w-6 sm:w-10 rounded-full transition-colors ${isDone ? 'bg-blue-500' : 'bg-slate-700'}`} />}
-                                <button
-                                    onClick={() => setStep(s.id)}
-                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${isActive ? 'bg-blue-600/20 border border-blue-500/50 text-blue-300 shadow-lg shadow-blue-500/10'
-                                            : isDone ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                                                : 'bg-slate-800/50 border border-slate-700/50 text-slate-500 hover:text-slate-300 hover:border-slate-600'
-                                        }`}
-                                >
-                                    {isDone ? <Check size={14} /> : <StepIcon size={14} />}
-                                    <span className="hidden sm:inline">{s.label}</span>
+                                {idx > 0 && <div style={{ width: 20, height: 2, background: isDone ? s.color : 'rgba(255,255,255,.08)' }} />}
+                                <button onClick={() => setStep(s.id)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 100, border: isActive ? `1.5px solid ${s.color}60` : '1.5px solid rgba(255,255,255,.07)', background: isActive ? `${s.color}18` : isDone ? `${s.color}10` : 'rgba(255,255,255,.03)', color: isActive ? '#fff' : isDone ? s.color : 'rgba(148,163,184,.5)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, transition: 'all .25s' }}>
+                                    {isDone ? <Check size={13} color={s.color} /> : <s.icon size={13} color={isActive ? s.color : 'currentColor'} />}
+                                    <span style={{ fontSize: 12 }}>{s.label}</span>
                                 </button>
                             </React.Fragment>
                         );
@@ -605,101 +338,44 @@ export default function ResumeBuilder({ onBack }) {
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="max-w-7xl mx-auto px-4 pb-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Form Side */}
-                    <div className={`${showPreview ? 'hidden lg:block' : ''}`}>
-                        <div className="bg-slate-900/50 backdrop-blur border border-slate-800/50 rounded-2xl p-6">
-                            {renderStep()}
-
-                            {/* Navigation */}
-                            <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-800/50">
-                                <button
-                                    onClick={() => setStep(Math.max(1, step - 1))}
-                                    disabled={step === 1}
-                                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-medium transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    <ArrowLeft size={16} /> Previous
-                                </button>
-                                <span className="text-slate-500 text-xs font-medium">Step {step} of 5</span>
-                                <button
-                                    onClick={() => setStep(Math.min(5, step + 1))}
-                                    disabled={step === 5}
-                                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    Next <ArrowRight size={16} />
-                                </button>
+            <div className="main-container" style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 24px 48px' }}>
+                <div className="responsive-grid" style={{ display: 'grid', gridTemplateColumns: showPreview ? '1fr' : '1fr 1fr', gap: 20, alignItems: 'start' }}>
+                    {!showPreview && (
+                        <div>
+                            <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, padding: '28px', backdropFilter: 'blur(20px)' }}>
+                                {renderStep()}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,.06)' }}>
+                                    <button onClick={() => setStep(Math.max(1, step - 1))} disabled={step === 1} style={{ padding: '10px 20px', borderRadius: 10, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.08)', color: step === 1 ? 'rgba(255,255,255,.2)' : '#cbd5e1', cursor: step === 1 ? 'not-allowed' : 'pointer', fontWeight: 600 }}>Back</button>
+                                    <span style={{ fontSize: 11.5, color: 'rgba(148,163,184,.4)' }}>Step {step} / 5</span>
+                                    <button onClick={() => setStep(Math.min(5, step + 1))} disabled={step === 5} className="glow-btn" style={{ padding: '10px 24px', borderRadius: 10, background: step === 5 ? 'rgba(99,102,241,.2)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', color: '#fff', cursor: step === 5 ? 'not-allowed' : 'pointer', fontWeight: 700 }}>Next</button>
+                                </div>
+                            </div>
+                            <div style={{ marginTop: 16, background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, padding: '22px 24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}><Layout size={15} color="#8b5cf6" /><span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 14 }}>Choose Template</span></div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+                                    {Object.entries(TEMPLATES).map(([key, tmpl]) => (
+                                        <button key={key} onClick={() => setTemplate(key)} style={{ padding: 0, border: template === key ? `2px solid #6366f1` : '2px solid rgba(255,255,255,.07)', borderRadius: 12, cursor: 'pointer', background: 'none', textAlign: 'left', overflow: 'hidden' }}>
+                                            <div style={{ height: 56, background: `linear-gradient(135deg, ${tmpl.preview[0]} 0%, ${tmpl.preview[1]} 100%)`, position: 'relative' }}>
+                                                {template === key && <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={10} color="#fff" /></div>}
+                                            </div>
+                                            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,.04)' }}><div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>{tmpl.name}</div><div style={{ fontSize: 10.5, color: 'rgba(148,163,184,.5)' }}>{tmpl.desc}</div></div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-
-                        {/* Template Selector */}
-                        <div className="mt-4 bg-slate-900/50 backdrop-blur border border-slate-800/50 rounded-2xl p-5">
-                            <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                                <Palette size={16} className="text-purple-400" /> Choose Template
-                            </h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                {Object.entries(TEMPLATES).map(([key, tmpl]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => setTemplate(key)}
-                                        className={`p-3 rounded-xl border-2 transition-all text-left ${template === key
-                                                ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/10'
-                                                : 'border-slate-700/50 bg-slate-800/30 hover:border-slate-600'
-                                            }`}
-                                    >
-                                        <div className="w-full h-2 rounded-full mb-2" style={{ background: tmpl.color }} />
-                                        <p className="text-white text-xs font-bold">{tmpl.name}</p>
-                                        <p className="text-slate-500 text-[10px]">{tmpl.desc}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Preview Side */}
-                    <div className={`${showPreview ? '' : 'hidden lg:block'}`}>
-                        <div className="sticky top-20">
-                            <div className="bg-slate-900/50 backdrop-blur border border-slate-800/50 rounded-2xl p-4 overflow-hidden">
-                                <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
-                                    <FileText size={16} className="text-green-400" /> Live Preview
-                                </h3>
-                                <div className="bg-white rounded-xl overflow-hidden shadow-2xl" style={{ transform: 'scale(0.72)', transformOrigin: 'top left', width: '138.9%', maxHeight: '80vh' }}>
-                                    {renderPreview()}
+                    )}
+                    <div style={{ position: showPreview ? 'relative' : 'sticky', top: 76 }}>
+                        <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, padding: '18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 13 }}><Eye size={14} color="#10b981" style={{ verticalAlign: 'middle', marginRight: 6 }}/>Live Preview</span><span style={{ fontSize: 11, color: 'rgba(148,163,184,.4)' }}>{TEMPLATES[template]?.name}</span></div>
+                            <div style={{ borderRadius: 10, overflow: 'auto', maxHeight: showPreview ? 'none' : 'calc(100vh - 180px)', background: '#e5e7eb' }} className="preview-shadow">
+                                <div style={{ transform: showPreview ? 'none' : 'scale(0.68)', transformOrigin: 'top left', width: showPreview ? '100%' : '147%', pointerEvents: 'none' }}>
+                                    <ResumePreview templateKey={template} data={{ personal, jobRole, experiences, educations, skills, projects }} previewRef={previewRef} />
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            {/* Styles */}
-            <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
-      `}</style>
-        </div>
-    );
-}
-
-// ==================== INPUT FIELD COMPONENT ====================
-function InputField({ label, value, onChange, placeholder, icon, type = 'text', disabled = false, className = '' }) {
-    return (
-        <div className={className}>
-            <label className="block text-sm font-semibold text-slate-300 mb-1.5">{label}</label>
-            <div className="relative">
-                {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">{icon}</span>}
-                <input
-                    type={type}
-                    value={value}
-                    onChange={e => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    disabled={disabled}
-                    className={`w-full bg-slate-800/50 border border-slate-600/50 rounded-xl ${icon ? 'pl-9' : 'pl-4'} pr-4 py-2.5 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition text-sm disabled:opacity-50`}
-                />
             </div>
         </div>
     );
