@@ -1,0 +1,7 @@
+{
+  "public": false,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/build",
+  "framework": "create-react-app",
+  "regions": ["bom1"]
+}
