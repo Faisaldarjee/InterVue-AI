@@ -13,12 +13,7 @@ import uuid
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
-from dotenv import load_dotenv, find_dotenv
-
-# Try loading from backend/.env first, then root/.env
-load_dotenv(find_dotenv(usecwd=True))
-if not os.getenv("GEMINI_API_KEY"):
-    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+from dotenv import load_dotenv
 
 # Local imports
 from llm_service import EnhancedLLMService
@@ -26,7 +21,6 @@ from resume_parser import ResumeParser
 from rapid_fire_mode import RapidFireMode
 from models import Answer, InterviewSession, RapidFireStartRequest
 from auth import get_current_user, get_optional_user
-from groq_service import GroqJobService
 from database import (
     get_profile, save_interview as db_save_interview,
     get_user_interviews, get_user_stats, save_resume as db_save_resume,
@@ -35,6 +29,8 @@ from database import (
 )
 from learning import get_full_learning_data
 from rate_limiter import rate_limiter
+
+load_dotenv()
 
 # ==================== LOGGING ====================
 logging.basicConfig(
@@ -115,14 +111,6 @@ analytics = {
     "average_score": 0.0,
     "total_candidates": 0
 }
-
-# ==================== GROQ FALLBACK INIT ====================
-try:
-    groq_service = GroqJobService()
-    logger.info("✅ Groq Fallback AI initialized")
-except Exception as e:
-    logger.error(f"⚠️ Groq Fallback initialization failed: {e}")
-    groq_service = None
 
 # ==================== HEALTH ====================
 

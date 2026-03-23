@@ -192,7 +192,7 @@ export default function InterviewRoom({
     // ==================== INTERVIEW COMPLETE OVERLAY ====================
     if (showComplete) {
         return (
-            <div className="fixed inset-0 z-50 bg-[#060918] flex items-center justify-center">
+            <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center">
                 <motion.div
                     initial={{ scale: 0.5, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -261,9 +261,9 @@ export default function InterviewRoom({
 
     // ==================== MAIN RENDER ====================
     return (
-        <div className="h-screen bg-[#060918] flex flex-col overflow-hidden">
+        <div className="h-screen bg-slate-950 flex flex-col overflow-hidden">
             {/* ===== TOP BAR ===== */}
-            <div className="flex-shrink-0 bg-[#0c1425]/80 backdrop-blur-2xl border-b border-white/[0.05] px-4 py-2.5 flex items-center justify-between z-20" style={{ WebkitBackdropFilter: 'blur(24px)' }}>
+            <div className="flex-shrink-0 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50 px-4 py-2.5 flex items-center justify-between z-20">
                 {/* Left — Room Info */}
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="text-slate-500 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800">
@@ -313,7 +313,7 @@ export default function InterviewRoom({
             {/* ===== MAIN CONTENT ===== */}
             <div className="flex-1 flex overflow-hidden">
                 {/* ===== LEFT — AI INTERVIEWER PANEL ===== */}
-                <div className="w-full lg:w-[45%] flex flex-col border-r border-white/[0.04] bg-gradient-to-b from-[#0c1425] to-[#060918]">
+                <div className="w-full lg:w-[45%] flex flex-col border-r border-slate-800/50 bg-gradient-to-b from-slate-900/50 to-slate-950">
                     {/* Question Card — TOP (always visible) */}
                     <div className="flex-shrink-0 p-4 lg:p-5 border-b border-slate-800/30">
                         <AnimatePresence mode="wait">
@@ -323,7 +323,7 @@ export default function InterviewRoom({
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 20 }}
                                 transition={{ duration: 0.3 }}
-                                className="bg-[#0c1425]/80 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-5 shadow-lg"
+                                className="bg-slate-800/40 backdrop-blur border border-slate-700/50 rounded-2xl p-5"
                             >
                                 <div className="flex items-center gap-2 mb-3">
                                     <MessageSquare size={14} className="text-blue-400" />
@@ -448,9 +448,9 @@ export default function InterviewRoom({
                 </div>
 
                 {/* ===== RIGHT — ANSWER PANEL ===== */}
-                <div className="hidden lg:flex w-[55%] flex-col bg-[#060918]">
+                <div className="hidden lg:flex w-[55%] flex-col bg-slate-950">
                     {/* Progress Dots */}
-                    <div className="flex-shrink-0 px-5 py-3 border-b border-white/[0.04] flex items-center gap-2">
+                    <div className="flex-shrink-0 px-5 py-3 border-b border-slate-800/50 flex items-center gap-2">
                         {Array.from({ length: totalQuestions }, (_, i) => (
                             <div key={i} className="flex items-center gap-1.5">
                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${i < currentQuestionIndex ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
@@ -549,7 +549,7 @@ export default function InterviewRoom({
                                 <button
                                     onClick={handleSubmit}
                                     disabled={loading || !answer.trim()}
-                                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 text-sm shadow-[0_6px_24px_rgba(59,130,246,0.2)] disabled:shadow-none"
+                                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:from-slate-700 disabled:to-slate-700 text-white font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 text-sm shadow-lg shadow-blue-500/10 disabled:shadow-none"
                                 >
                                     {loading ? (
                                         <><Loader size={16} className="animate-spin" /> Evaluating...</>

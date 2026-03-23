@@ -37,7 +37,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, message }) {
                             <p className="text-indigo-400 font-medium text-sm bg-indigo-500/10 inline-block px-3 py-1 rounded-full">{message}</p>
                         </div>
                     )}
-
+                    
                     <div className="max-h-[85vh] overflow-y-auto custom-scrollbar">
                         {/* We wrap AuthPages so it handles its own logic inside our modal */}
                         {/* We might need to override some of AuthPages's full-screen styles by targeting its wrapper */}
