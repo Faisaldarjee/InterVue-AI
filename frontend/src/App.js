@@ -1255,6 +1255,7 @@ export default function App() {
   };
 
   const handleStartRapidFire = () => {
+    if (!requireAuth("Sign up to save your Rapid Fire performance and unlock personalized AI insights.")) return;
     setPage('rapid-fire');
   };
 
@@ -1273,6 +1274,7 @@ export default function App() {
   };
 
   const handleStartResumeBuilder = () => {
+    if (!requireAuth("Sign up to save your resumes and access premium AI-enhanced templates.")) return;
     setPage('resume-builder');
   };
 

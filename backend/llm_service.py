@@ -145,6 +145,22 @@ class EnhancedLLMService:
                     logger.warning(f"⚠️ API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
+                    # Final fallback to Groq if Gemini is exhausted
+                    if "429" in str(e) or "ResourceExhausted" in str(e) or "503" in str(e):
+                        logger.info("🔮 429 Detected - Kicking off Groq Llama 3.3 Fallback...")
+                        try:
+                            from groq_service import GroqJobService
+                            groq = GroqJobService()
+                            if groq.client:
+                                result = groq._chat("You are a expert interviewer providing helpful feedback. Output ONLY valid JSON matching the schema.", prompt, max_tokens=2000)
+                                if "raw" not in result:
+                                    logger.info("✅ Groq Fallback successful")
+                                    # Since we need a string back to fit existing _parse_json_response flow
+                                    import json
+                                    return json.dumps(result)
+                        except Exception as ge:
+                            logger.error(f"❌ Groq Fallback and Gemini both failed: {ge}")
+
                     logger.error(f"❌ API call failed permanently: {e}")
                     break
 
@@ -539,24 +555,23 @@ interview_readiness must be 1-10."""
         """
 
         try:
-            response_text = self._call_with_retry(prompt)
-            if response_text is None:
-                logger.error("❌ Batch evaluation API failed after retries")
+            from groq_service import GroqJobService
+            groq = GroqJobService()
+            if not groq.client:
+                raise Exception("Groq client not available")
+                
+            logger.info("🚀 Routing Batch Evaluation to Groq Llama 3.3 for maximum speed...")
+            result = groq.evaluate_batch(prompt)
+            
+            if "raw" in result:
+                logger.error("❌ Groq returned raw text instead of JSON")
                 return self._default_batch_evaluation(len(answers))
 
-            result = self._parse_json_response(response_text)
-            
-            # Ensure we have an entry for every question, even if LLM missed one
-            evals = result.get('question_evaluations', [])
-            if len(evals) < len(answers):
-                logger.warning(f"⚠️ LLM returned only {len(evals)} evals for {len(answers)} answers. padding...")
-                # Logic to handle missing evals could go here, but for now we accept what we got or default
-            
-            logger.info("✅ Batch evaluation complete")
+            logger.info("✅ Groq Batch evaluation complete")
             return result
             
         except Exception as e:
-            logger.error(f"❌ Batch evaluation failed: {e}")
+            logger.error(f"❌ Groq Batch evaluation failed: {e}")
             return self._default_batch_evaluation(len(answers))
 
     def _default_batch_evaluation(self, count: int) -> dict:
