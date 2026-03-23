@@ -109,8 +109,8 @@ function LandingPage({ isAuthenticated, userName, onStartInterview, onStartRapid
         handleStartInterview();
       };
       window.addEventListener('auth-success', onAuthSuccess);
-      window.dispatchEvent(new CustomEvent('require-auth', { 
-        detail: { message: 'Create a free account to generate your personalized AI interview.' } 
+      window.dispatchEvent(new CustomEvent('require-auth', {
+        detail: { message: 'Create a free account to generate your personalized AI interview.' }
       }));
       return;
     }
@@ -246,12 +246,6 @@ function LandingPage({ isAuthenticated, userName, onStartInterview, onStartRapid
               >
                 Start Interview
                 <ArrowRight size={18} className="group-hover:translate-x-1 transition" />
-              </button>
-              <button
-                onClick={onStartHistory}
-                className="px-8 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all text-sm backdrop-blur-sm"
-              >
-                View History
               </button>
             </motion.div>
 
@@ -1057,7 +1051,7 @@ const pageVariants = {
 };
 
 // ==================== USER NAVBAR ====================
-function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
+function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth, onStartHistory }) {
   const [showMenu, setShowMenu] = useState(false);
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
@@ -1073,6 +1067,13 @@ function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
             </div>
             <span className="text-white font-bold text-sm tracking-tight hidden sm:block">InterVue AI</span>
           </button>
+        </div>
+
+        {/* Center — Navigation Tabs */}
+        <div className="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
+          <button onClick={onHome} className={`text-sm font-medium transition ${currentPage === 'landing' ? 'text-white' : 'text-slate-400 hover:text-white'}`}>Home</button>
+          <button onClick={onStartHistory} className={`text-sm font-medium transition ${currentPage === 'history' ? 'text-white' : 'text-slate-400 hover:text-white'}`}>Dashboard</button>
+          <button onClick={() => {}} className={`text-sm font-medium transition ${currentPage === 'practice' ? 'text-white' : 'text-slate-400 hover:text-white'}`}>Practice</button>
         </div>
 
         {/* Right — Profile */}
@@ -1121,10 +1122,10 @@ function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
             </>
           ) : (
             <button
-               onClick={onOpenAuth}
-               className="px-5 py-2 min-w-[120px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-500/20"
+              onClick={onOpenAuth}
+              className="px-5 py-2 min-w-[120px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-500/20"
             >
-               Log in
+              Log in
             </button>
           )}
         </div>
@@ -1138,6 +1139,7 @@ export default function App() {
   const [page, setPage] = useState('landing');
   const [interviewSession, setInterviewSession] = useState(null);
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
+  const [resumeBuilderInitialData, setResumeBuilderInitialData] = useState(null);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
@@ -1268,11 +1270,11 @@ export default function App() {
   };
 
   const handleStartResumeScorer = () => {
-    if (!requireAuth("Sign up to unlock advanced AI ATS checking and resume optimization.")) return;
     setPage('resume-scorer');
   };
 
-  const handleStartResumeBuilder = () => {
+  const handleStartResumeBuilder = (initialData = null) => {
+    setResumeBuilderInitialData(initialData);
     setPage('resume-builder');
   };
 
@@ -1304,14 +1306,21 @@ export default function App() {
   // ===== MAIN APP =====
   return (
     <div className="min-h-screen bg-slate-950 relative">
-      <AuthModal 
-        isOpen={showAuthModal} 
-        onClose={() => setShowAuthModal(false)} 
-        onAuthSuccess={handleAuthSuccess} 
-        message={authMessage} 
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onAuthSuccess={handleAuthSuccess}
+        message={authMessage}
       />
       {/* User Navbar */}
-      <UserNavbar user={session?.user} onLogout={handleLogout} onHome={() => setPage('landing')} currentPage={page} onOpenAuth={() => { setAuthMessage('Welcome to InterVue AI'); setShowAuthModal(true); }} />
+      <UserNavbar
+        user={session?.user}
+        onLogout={handleLogout}
+        onHome={() => setPage('landing')}
+        currentPage={page}
+        onOpenAuth={() => { setAuthMessage('Welcome to InterVue AI'); setShowAuthModal(true); }}
+        onStartHistory={handleStartHistory}
+      />
 
       <div className="pt-14">
         <AnimatePresence mode="wait">
@@ -1354,7 +1363,10 @@ export default function App() {
 
           {page === 'resume-builder' && (
             <motion.div key="resume-builder" variants={pageVariants} initial="initial" animate="animate" exit="exit">
-              <ResumeBuilder onBack={handleBackToHome} />
+              <ResumeBuilder
+                initialData={resumeBuilderInitialData}
+                onHome={handleBackToHome}
+              />
             </motion.div>
           )}
 
@@ -1416,6 +1428,7 @@ export default function App() {
               />
             </motion.div>
           )}
+
         </AnimatePresence>
       </div>
     </div>

@@ -101,7 +101,8 @@ function SortableItemWrapper({ id, onRemove, children }) {
     );
 }
 
-export default function ResumeBuilder({ onBack }) {
+export default function ResumeBuilder({ onBack, onHome, initialData }) {
+    const onBackHandler = onHome || onBack;
     const [step, setStep] = useState(1);
     const [template, setTemplate] = useState('noir_executive');
     const [showPreview, setShowPreview] = useState(false);
@@ -111,6 +112,47 @@ export default function ResumeBuilder({ onBack }) {
     const previewRef = useRef(null);
 
     const { personal, setPersonal, jobRole, setJobRole, jobDescription, setJobDescription, experiences, setExps, educations, setEdus, skills, setSkills, projects, setProjs } = useResumeState();
+
+    useEffect(() => {
+        if (initialData) {
+            if (initialData.fullName || initialData.email || initialData.phone || initialData.location || initialData.summary) {
+                setPersonal(prev => ({
+                    ...prev,
+                    fullName: initialData.fullName || prev.fullName,
+                    email: initialData.email || prev.email,
+                    phone: initialData.phone || prev.phone,
+                    location: initialData.location || prev.location,
+                    summary: initialData.summary || prev.summary
+                }));
+            }
+            if (initialData.experience && Array.isArray(initialData.experience)) {
+                setExps(initialData.experience.map((exp, i) => {
+                    const bulletsStr = Array.isArray(exp.description) ? exp.description.join('\n') : (exp.description || '');
+                    return {
+                        id: Date.now() + i,
+                        company: exp.company || '',
+                        role: exp.role || '',
+                        duration: exp.duration || '',
+                        bullets: bulletsStr.split('\n').map(b => b.replace(/^•\s*/, '').trim()).filter(Boolean)
+                    };
+                }));
+            }
+            if (initialData.education && Array.isArray(initialData.education)) {
+                setEdus(initialData.education.map((edu, i) => ({
+                    id: Date.now() + i + 100,
+                    school: edu.school || '',
+                    degree: edu.degree || '',
+                    duration: edu.year || ''
+                })));
+            }
+            if (initialData.skills && Array.isArray(initialData.skills)) {
+                setSkills(initialData.skills);
+            }
+            
+            // Auto open preview if initial data is loaded
+            setShowPreview(true);
+        }
+    }, [initialData, setPersonal, setExps, setEdus, setSkills]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -299,13 +341,16 @@ export default function ResumeBuilder({ onBack }) {
             <div style={{ position: 'fixed', bottom: '10%', right: '5%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
             <div style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(24px)', background: 'rgba(9,9,11,.85)', borderBottom: '1px solid rgba(255,255,255,.06)', padding: '0 24px' }}>
-                <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-                    <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'rgba(148,163,184,.7)', cursor: 'pointer', fontSize: 13 }}>
-                        <ArrowLeft size={16} /> <span className="hide-mobile">Back</span>
-                    </button>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={14} color="#fff" /></div>
-                        <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>ResumeFlow</span>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <button onClick={onBackHandler} style={{ background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', color: 'white', cursor: 'pointer', padding: 8, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <ArrowLeft size={18} />
+                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={14} color="#fff" /></div>
+                            <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>ResumeFlow</span>
+                        </div>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
                         <button onClick={() => setShowPreview(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)', color: '#cbd5e1', cursor: 'pointer', fontSize: 12.5 }}>

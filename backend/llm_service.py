@@ -145,12 +145,27 @@ class EnhancedLLMService:
                     logger.warning(f"⚠️ API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
-                    logger.error(f"❌ API call failed permanently: {e}")
+                    logger.error(f"❌ Gemini API failed permanently: {e}")
                     break
 
         # Restore main key on failure path
         if use_resume_key and self.resume_api_key:
             genai.configure(api_key=self.main_api_key)
+
+        # ================= GROQ FALLBACK =================
+        logger.warning("🔄 Activating Groq (Llama 3.3) Fallback Engine...")
+        try:
+            from groq_service import GroqJobService
+            groq = GroqJobService()
+            if groq.client:
+                result_dict = groq._chat("You are an expert AI interviewer. Output strictly valid JSON matching the requested structure.", prompt, max_tokens=1500)
+                if isinstance(result_dict, dict) and "raw" not in result_dict:
+                    logger.info("✅ Groq Fallback successful")
+                    return json.dumps(result_dict)
+                elif "raw" in result_dict:
+                    return result_dict["raw"]
+        except Exception as groq_e:
+            logger.error(f"❌ Groq Fallback also failed: {groq_e}")
 
         return None
 
@@ -539,24 +554,28 @@ interview_readiness must be 1-10."""
         """
 
         try:
-            response_text = self._call_with_retry(prompt)
-            if response_text is None:
-                logger.error("❌ Batch evaluation API failed after retries")
+            from groq_service import GroqJobService
+            groq = GroqJobService()
+            if not groq.client:
+                raise Exception("Groq client not available")
+                
+            logger.info("🚀 Routing Batch Evaluation to Groq Llama 3.3 for maximum speed...")
+            result = groq._chat("You are an expert interviewer evaluating a speedy Rapid Fire session. Output ONLY valid JSON matching the structure perfectly.", prompt, max_tokens=2000)
+            
+            if "raw" in result:
+                logger.error("❌ Groq returned raw text instead of JSON")
                 return self._default_batch_evaluation(len(answers))
 
-            result = self._parse_json_response(response_text)
-            
             # Ensure we have an entry for every question, even if LLM missed one
             evals = result.get('question_evaluations', [])
             if len(evals) < len(answers):
-                logger.warning(f"⚠️ LLM returned only {len(evals)} evals for {len(answers)} answers. padding...")
-                # Logic to handle missing evals could go here, but for now we accept what we got or default
+                logger.warning(f"⚠️ Groq returned only {len(evals)} evals for {len(answers)} answers. padding...")
             
-            logger.info("✅ Batch evaluation complete")
+            logger.info("✅ Groq Batch evaluation complete")
             return result
             
         except Exception as e:
-            logger.error(f"❌ Batch evaluation failed: {e}")
+            logger.error(f"❌ Groq Batch evaluation failed: {e}")
             return self._default_batch_evaluation(len(answers))
 
     def _default_batch_evaluation(self, count: int) -> dict:
@@ -583,11 +602,12 @@ interview_readiness must be 1-10."""
         Generate exactly {num_questions} unique technical and behavioral questions.
         
         Requirements:
-        1. FOCUS on Real-world Production Scenarios, Debugging, and System Design.
-        2. Questions must be 'Job Ready' - the kind asked in Senior/Principal level interviews.
-        3. AVOID simple definitions (e.g. "What is X?"). ASK "How would you handle X in production?"
+        Requirements:
+        1. FOCUS on quick-recall, foundational concepts, best practices, and "What is the difference between X and Y" questions.
+        2. Questions must be answerable within 30-60 seconds, perfect for a fast-paced Rapid Fire test.
+        3. Aim to build core skills and test fundamental understanding over complex system architecture.
         4. difficulty should be '{difficulty}'.
-        5. 'keywords' must be a list of 3-5 crucial words/phrases expected in the answer.
+        5. 'keywords' must be a list of 2-4 crucial words/phrases expected in the answer.
         
         Return ONLY a JSON array with this structure:
         [
@@ -601,20 +621,22 @@ interview_readiness must be 1-10."""
         """
 
         try:
-            # For large batches, we might need a model with larger output context or just hope for the best
-            # Breaking it down might be better, but let's try one shot first for simplicity
-            response_text = self._call_with_retry(prompt)
-            if response_text is None:
-                logger.error("❌ Batch generation API failed")
-                return []
-
-            result = self._parse_json_response(response_text)
+            from groq_service import GroqJobService
+            groq = GroqJobService()
+            if not groq.client:
+                raise Exception("Groq client not available")
                 
-            if not isinstance(result, list):
-                if isinstance(result, dict) and 'questions' in result:
-                    result = result['questions']
-                else:
-                    result = [result]
+            logger.info("🚀 Routing Background Bank Expansion to Groq Llama 3.3...")
+            result = groq._chat("You are an expert technical interviewer. Output ONLY a valid JSON array of question objects.", prompt, max_tokens=3000)
+            
+            if isinstance(result, dict) and 'raw' in result:
+                logger.error("❌ Groq returned raw text instead of JSON array")
+                return []
+                
+            if isinstance(result, dict) and 'questions' in result:
+                result = result['questions']
+            elif not isinstance(result, list):
+                result = [result]
             
             # Validate and Clean
             valid_questions = []
@@ -627,11 +649,12 @@ interview_readiness must be 1-10."""
                         "keywords": q.get('keywords', ["relevant answer"])
                     })
             
-            logger.info(f"✅ Batch generated {len(valid_questions)} questions for {job_role}")
+            logger.info(f"✅ Groq Batch generated {len(valid_questions)} questions for {job_role}")
             return valid_questions
             
         except Exception as e:
-            logger.error(f"❌ Batch generation failed for {job_role}: {e}")
+            logger.error(f"❌ Groq Batch generation failed for {job_role}: {e}")
+            return []
     def analyze_resume(self, resume_text: str) -> dict:
         """
         3-in-One Analysis: Score + ATS Check + Magic Rewrite.
