@@ -51,7 +51,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        os.getenv("FRONTEND_URL", "https://intervue-ai.vercel.app"),
+        "https://intervue-ai.vercel.app",
+        "https://intervue-ai.onrender.com",
+        "https://intervue-ai-backend.onrender.com",
+        os.getenv("FRONTEND_URL", "").strip(),
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -108,8 +111,10 @@ sessions: Dict[str, InterviewSession] = {}
 analytics = {
     "total_sessions": 0,
     "completed_interviews": 0,
+    "interviews_completed": 0,
     "average_score": 0.0,
-    "total_candidates": 0
+    "total_candidates": 0,
+    "questions_answered": 0,
 }
 
 # ==================== HEALTH ====================
@@ -297,6 +302,9 @@ async def analyze_resume_endpoint(
         
         if not resume_text or len(resume_text) < 50:
              raise HTTPException(status_code=400, detail="Could not extract text from file")
+
+        if not llm:
+            raise HTTPException(status_code=503, detail="LLM service unavailable")
              
         # Call the new 3-in-1 Analysis
         analysis = llm.analyze_resume(resume_text)
@@ -463,12 +471,16 @@ async def submit_voice_batch(request: VoiceBatchRequest):
     try:
         logger.info(f"🎙️ Voice Batch Submission: {len(request.answers)} answers for {request.job_role}")
         
+        if not llm:
+            raise HTTPException(status_code=503, detail="LLM service unavailable")
+
         # 1. Single API Call for Full Report
         evaluation = llm.evaluate_interview_batch(request.answers, request.job_role)
         
         # 2. Update Analytics
         analytics["questions_answered"] += len(request.answers)
         analytics["interviews_completed"] += 1
+        analytics["completed_interviews"] += 1
         
         return {
             "status": "completed",
@@ -493,6 +505,56 @@ async def submit_voice_batch(request: VoiceBatchRequest):
 
     except Exception as e:
         logger.error(f"❌ Voice Batch Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class RapidFireBatchRequest(BaseModel):
+    items: list # List of {question: str, answer: str}
+    job_role: str
+    session_id: Optional[str] = None
+
+@app.post("/api/rapid-fire/batch-submit")
+async def submit_rapid_fire_batch(request: RapidFireBatchRequest):
+    """
+    Unified Rapid Fire Batch Evaluation (Near-instant 1-shot report)
+    """
+    try:
+        logger.info(f"🔥 Rapid Fire Batch Submission: {len(request.items)} answers for {request.job_role}")
+        
+        if not llm:
+            raise HTTPException(status_code=503, detail="LLM service unavailable")
+
+        # Format for evaluation service
+        batch_data = []
+        for item in request.items:
+            batch_data.append({
+                "question": item.get('question', ''),
+                "answer": item.get('answer', ''),
+                "type": "Technical" # Rapid Fire is mostly technical
+            })
+            
+        # Perform Batch Evaluation (Powered by Groq)
+        evaluation = llm.evaluate_interview_batch(batch_data, request.job_role)
+        
+        # Prepare standardized final report
+        overall = evaluation.get("overall_report", {})
+        
+        return {
+            "status": "completed",
+            "results": {
+                "average_score": overall.get("average_score", 0),
+                "total_questions": len(request.items),
+                "best_score": max([e.get('score', 0) for e in evaluation.get('question_evaluations', [])]) if evaluation.get('question_evaluations') else 0,
+                "worst_score": min([e.get('score', 0) for e in evaluation.get('question_evaluations', [])]) if evaluation.get('question_evaluations') else 0,
+                "total_time_seconds": 600, # Approx
+                "scores": [e.get('score', 0) for e in evaluation.get('question_evaluations', [])],
+                "rating": overall.get("rating", "N/A"),
+                "summary": overall.get("summary", ""),
+                "strengths": overall.get("strengths", []),
+                "improvements": overall.get("improvements", [])
+            }
+        }
+    except Exception as e:
+        logger.error(f"❌ Rapid Fire Batch Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/submit-answer/{session_id}")
@@ -856,20 +918,20 @@ async def general_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("🚀 Starting InterVue AI Enhanced...")
-    print("\n" + "="*70)
-    print("🚀 InterVue AI - Enhanced Interview Platform v3.0")
-    print("="*70)
+    logger.info("Starting InterVue AI Enhanced...")
+    print("\n" + "=" * 70)
+    print("InterVue AI - Enhanced Interview Platform v3.0")
+    print("=" * 70)
     print("Features:")
-    print("  ✅ Smart Question Generation (3-6 questions based on analysis)")
-    print("  ✅ Adaptive Difficulty Levels")
-    print("  ✅ Learning Insights & Real Interview Tips")
-    print("  ✅ Confidence Building Feedback")
-    print("  ✅ Preparation Recommendations")
-    print("="*70)
-    print(f"📡 API: http://localhost:8000")
-    print(f"📚 Docs: http://localhost:8000/docs")
-    print("="*70 + "\n")
+    print("  - Smart Question Generation (3-6 questions based on analysis)")
+    print("  - Adaptive Difficulty Levels")
+    print("  - Learning Insights & Real Interview Tips")
+    print("  - Confidence Building Feedback")
+    print("  - Preparation Recommendations")
+    print("=" * 70)
+    print("API: http://localhost:8000")
+    print("Docs: http://localhost:8000/docs")
+    print("=" * 70 + "\n")
     
     uvicorn.run(
         "__main__:app",

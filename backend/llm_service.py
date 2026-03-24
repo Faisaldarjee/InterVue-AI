@@ -36,42 +36,29 @@ class EnhancedLLMService:
             raise ValueError("GEMINI_API_KEY not found in .env")
         
         genai.configure(api_key=self.main_api_key)
-        
-        # Auto-detect best available model
-        print("🔍 Detecting available Gemini models...")
-        try:
-            available_models = []
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    available_models.append(m.name)
-            
-            priorities = [
-                'models/gemini-2.5-flash',
-                'models/gemini-1.5-flash',
-                'models/gemini-1.5-pro',
-                'models/gemini-1.0-pro',
-                'models/gemini-pro'
-            ]
-            
-            chosen_model = None
-            for p in priorities:
-                if p in available_models:
-                    chosen_model = p
-                    break
-            
-            if not chosen_model and available_models:
-                chosen_model = available_models[0]
-            
-            if not chosen_model:
-                chosen_model = 'models/gemini-pro'
-            
-            print(f"✅ Using model: {chosen_model}")
-            self.model = genai.GenerativeModel(chosen_model)
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Model detection failed: {e}. Using default.")
-            self.model = genai.GenerativeModel('models/gemini-pro')
-        
+
+        preferred_model = os.getenv('GEMINI_MODEL', 'models/gemini-1.5-flash')
+        fallback_models = [
+            preferred_model,
+            'models/gemini-1.5-flash',
+            'models/gemini-1.5-pro',
+            'models/gemini-pro'
+        ]
+
+        self.model = None
+        last_error = None
+        for model_name in fallback_models:
+            try:
+                self.model = genai.GenerativeModel(model_name)
+                logger.info(f"Using model: {model_name}")
+                break
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model init failed for {model_name}: {e}")
+
+        if self.model is None:
+            raise RuntimeError(f"Unable to initialize any Gemini model: {last_error}")
+
         self.cache_stats = {'total_requests': 0, 'cache_hits': 0, 'api_calls': 0}
 
         # API Budget Tracker
@@ -145,6 +132,22 @@ class EnhancedLLMService:
                     logger.warning(f"⚠️ API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
+                    # Final fallback to Groq if Gemini is exhausted
+                    if "429" in str(e) or "ResourceExhausted" in str(e) or "503" in str(e):
+                        logger.info("🔮 429 Detected - Kicking off Groq Llama 3.3 Fallback...")
+                        try:
+                            from groq_service import GroqJobService
+                            groq = GroqJobService()
+                            if groq.client:
+                                result = groq._chat("You are a expert interviewer providing helpful feedback. Output ONLY valid JSON matching the schema.", prompt, max_tokens=2000)
+                                if "raw" not in result:
+                                    logger.info("✅ Groq Fallback successful")
+                                    # Since we need a string back to fit existing _parse_json_response flow
+                                    import json
+                                    return json.dumps(result)
+                        except Exception as ge:
+                            logger.error(f"❌ Groq Fallback and Gemini both failed: {ge}")
+
                     logger.error(f"❌ API call failed permanently: {e}")
                     break
 
@@ -539,24 +542,23 @@ interview_readiness must be 1-10."""
         """
 
         try:
-            response_text = self._call_with_retry(prompt)
-            if response_text is None:
-                logger.error("❌ Batch evaluation API failed after retries")
+            from groq_service import GroqJobService
+            groq = GroqJobService()
+            if not groq.client:
+                raise Exception("Groq client not available")
+                
+            logger.info("🚀 Routing Batch Evaluation to Groq Llama 3.3 for maximum speed...")
+            result = groq.evaluate_batch(prompt)
+            
+            if "raw" in result:
+                logger.error("❌ Groq returned raw text instead of JSON")
                 return self._default_batch_evaluation(len(answers))
 
-            result = self._parse_json_response(response_text)
-            
-            # Ensure we have an entry for every question, even if LLM missed one
-            evals = result.get('question_evaluations', [])
-            if len(evals) < len(answers):
-                logger.warning(f"⚠️ LLM returned only {len(evals)} evals for {len(answers)} answers. padding...")
-                # Logic to handle missing evals could go here, but for now we accept what we got or default
-            
-            logger.info("✅ Batch evaluation complete")
+            logger.info("✅ Groq Batch evaluation complete")
             return result
             
         except Exception as e:
-            logger.error(f"❌ Batch evaluation failed: {e}")
+            logger.error(f"❌ Groq Batch evaluation failed: {e}")
             return self._default_batch_evaluation(len(answers))
 
     def _default_batch_evaluation(self, count: int) -> dict:

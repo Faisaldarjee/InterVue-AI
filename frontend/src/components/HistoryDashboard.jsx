@@ -399,10 +399,10 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                 >
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full mb-5">
                         <Sparkles size={14} className="text-blue-400" />
-                        <span className="text-blue-300 text-xs font-medium">Smart Learning Dashboard</span>
+                        <span className="text-blue-300 text-xs font-medium">Personalized Insights Dashboard</span>
                     </div>
                     <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
-                        Your Learning Journey
+                        Your Professional Dashboard
                     </h1>
                     <p className="text-slate-400 max-w-xl mx-auto text-sm">
                         Track skills, earn XP, unlock achievements, and get personalized recommendations

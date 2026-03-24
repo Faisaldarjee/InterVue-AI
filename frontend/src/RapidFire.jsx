@@ -269,56 +269,58 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const currentAnswerData = {
+      question: currentQuestion.question,
+      answer: answer.trim()
+    };
 
-    try {
-      const response = await axios.post(
-        `${API_URL}/rapid-fire/${interviewData.interviewId}/submit-answer`,
-        {
-          answer: answer.trim(),
-          question_index: currentQuestionIndex
-        },
-        { timeout: 60000 }
-      );
+    const updatedAnswers = [...allAnswers, currentAnswerData];
+    setAllAnswers(updatedAnswers);
 
-      if (response.data.status === 'completed' || response.data.interview_completed) {
+    // Check if this was the last question
+    if (currentQuestionIndex + 1 >= interviewData.totalQuestions) {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.post(
+          `${API_URL}/api/rapid-fire/batch-submit`,
+          {
+            items: updatedAnswers,
+            job_role: interviewData.jobRole,
+            session_id: interviewData.interviewId
+          },
+          { timeout: 90000 }
+        );
+
         onAnswer({
           isComplete: true,
-          results: response.data.results || response.data.final_report,
-          allAnswers: [...allAnswers, {
-            question: currentQuestion.question,
-            score: 0 // Score is processed at batch level
-          }]
+          results: response.data.results,
+          allAnswers: updatedAnswers
         });
-      } else {
-        // Show "Saved" feedback briefly
-        setFeedback({
-          score: 0,
-          feedback: "Answer Saved! Next Question..."
-        });
-
-        setTimeout(() => {
-          setAllAnswers(prev => [...prev, {
-            question: currentQuestion.question,
-            score: 0
-          }]);
-
-          // CRITICAL FIX: Update question from backend response
-          if (response.data.next_question) {
-            setCurrentQuestion(response.data.next_question);
-          }
-
-          setCurrentQuestionIndex(currentQuestionIndex + 1);
-          setAnswer('');
-          setTimeLeft(60);
-          setFeedback(null);
-        }, 1000); // Reduced delay for speed
+      } catch (err) {
+        setError(err.response?.data?.error || 'Failed to generate final report. Please try again.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to submit answer');
-    } finally {
-      setLoading(false);
+    } else {
+      // Not the last question -> Just move to next immediately (Zero Latency)
+      setFeedback({
+        score: 0,
+        feedback: "Answer Saved! Next..."
+      });
+      
+      setTimeout(() => {
+        // Move to next question from the pre-loaded questions_list
+        const nextIdx = currentQuestionIndex + 1;
+        if (interviewData.questions && interviewData.questions[nextIdx]) {
+          setCurrentQuestion(interviewData.questions[nextIdx]);
+        }
+        
+        setCurrentQuestionIndex(nextIdx);
+        setAnswer('');
+        setTimeLeft(60);
+        setFeedback(null);
+      }, 400); // Very brief feedback transition
     }
   };
 

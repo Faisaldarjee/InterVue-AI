@@ -251,7 +251,7 @@ function LandingPage({ isAuthenticated, userName, onStartInterview, onStartRapid
                 onClick={onStartHistory}
                 className="px-8 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all text-sm backdrop-blur-sm"
               >
-                View History
+                Dashboard
               </button>
             </motion.div>
 
@@ -1057,7 +1057,7 @@ const pageVariants = {
 };
 
 // ==================== USER NAVBAR ====================
-function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
+function UserNavbar({ user, onLogout, onHome, onOpenHistory, currentPage, onOpenAuth }) {
   const [showMenu, setShowMenu] = useState(false);
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
@@ -1106,7 +1106,14 @@ function UserNavbar({ user, onLogout, onHome, currentPage, onOpenAuth }) {
                       <p className="text-white text-sm font-semibold truncate">{displayName}</p>
                       <p className="text-slate-500 text-xs truncate">{user?.email}</p>
                     </div>
-                    <div className="p-1.5">
+                    <div className="p-1.5 space-y-1">
+                      <button
+                        onClick={() => { setShowMenu(false); onOpenHistory ? onOpenHistory() : onHome(); }}
+                        className="w-full px-3 py-2 text-left text-blue-400 hover:bg-blue-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                      >
+                        <History size={14} />
+                        Dashboard
+                      </button>
                       <button
                         onClick={() => { setShowMenu(false); onLogout(); }}
                         className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-2 text-sm"
@@ -1255,6 +1262,7 @@ export default function App() {
   };
 
   const handleStartRapidFire = () => {
+    if (!requireAuth("Sign up to save your Rapid Fire performance and unlock personalized AI insights.")) return;
     setPage('rapid-fire');
   };
 
@@ -1273,6 +1281,7 @@ export default function App() {
   };
 
   const handleStartResumeBuilder = () => {
+    if (!requireAuth("Sign up to save your resumes and access premium AI-enhanced templates.")) return;
     setPage('resume-builder');
   };
 
@@ -1311,7 +1320,7 @@ export default function App() {
         message={authMessage} 
       />
       {/* User Navbar */}
-      <UserNavbar user={session?.user} onLogout={handleLogout} onHome={() => setPage('landing')} currentPage={page} onOpenAuth={() => { setAuthMessage('Welcome to InterVue AI'); setShowAuthModal(true); }} />
+      <UserNavbar user={session?.user} onLogout={handleLogout} onHome={() => setPage('landing')} onOpenHistory={handleStartHistory} currentPage={page} onOpenAuth={() => { setAuthMessage('Welcome to InterVue AI'); setShowAuthModal(true); }} />
 
       <div className="pt-14">
         <AnimatePresence mode="wait">

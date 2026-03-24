@@ -12,6 +12,8 @@ import { useResumeState, EMPTY_EXP, EMPTY_EDU, EMPTY_PROJ } from './components/R
 import { Field, TextArea, StepHeader, MiniBtn, AddBtn } from './components/ResumeBuilder/components/FormInputs';
 import ResumePreview from './components/ResumeBuilder/templates/ResumePreview';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const FontLoader = () => (
     <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@300;400;600;700&family=Syne:wght@400;600;700;800&family=Fraunces:wght@300;400;700;900&family=Cabinet+Grotesk:wght@400;500;700;800;900&display=swap');
@@ -69,7 +71,7 @@ const STEPS = [
 
 async function aiEnhanceBullet(bullet, role, jobDescription) {
     try {
-        const res = await fetch('http://localhost:8000/api/enhance-bullet', {
+        const res = await fetch(`${API_URL}/api/enhance-bullet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bullet, job_role: role || 'Professional', job_description: jobDescription || '' })
