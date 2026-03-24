@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Square, ArrowRight, Volume2, AlertCircle, Loader, X, RefreshCw } from 'lucide-react';
 import { submitVoiceInterviewBatch } from './utils/apiClient';
 
@@ -33,7 +33,7 @@ const AudioVisualizer = ({ isListening }) => {
 
 export default function VoiceInterview({ initialData, onBack, onComplete }) {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [questions, setQuestions] = useState(initialData.questions || []);
+    const [questions] = useState(initialData.questions || []);
     const [answers, setAnswers] = useState([]);
     const [isListening, setIsListening] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
@@ -155,13 +155,41 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
             setError('Browser not supported. Use Chrome for best experience.');
         }
 
+        const rec = recognitionRef.current;
+        const syn = synthesisRef.current;
         return () => {
-            if (recognitionRef.current) recognitionRef.current.stop();
-            if (synthesisRef.current) synthesisRef.current.cancel();
+            if (rec) rec.stop();
+            if (syn) syn.cancel();
         };
     }, []);
 
-    // Helper to robustly start/stop
+    const speakText = useCallback((text) => {
+        if (!synthesisRef.current) return;
+        synthesisRef.current.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+
+        // Slightly faster rate for "Rapid Fire" feel, but not too fast
+        utterance.rate = 1.1;
+        utterance.pitch = 1.05; // Slightly higher pitch often sounds clearer/more feminine if generic
+
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        synthesisRef.current.speak(utterance);
+    }, [preferredVoice]); // depends on preferredVoice
+
+    // Auto-Speak Question logic
+    useEffect(() => {
+        if (currentQuestion) {
+            // Slight delay to ensure voice is loaded if it's the very first question
+            const timer = setTimeout(() => speakText(currentQuestion.question), 800);
+            return () => clearTimeout(timer);
+        }
+    }, [currentQuestion, currentQuestionIndex, preferredVoice, speakText]); // Added dependencies
     const toggleListening = () => {
         if (!recognitionRef.current) return;
 
@@ -182,35 +210,6 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
             }
         }
     };
-
-    // Auto-Speak Question logic
-    useEffect(() => {
-        if (currentQuestion) {
-            // Slight delay to ensure voice is loaded if it's the very first question
-            const timer = setTimeout(() => speakText(currentQuestion.question), 800);
-            return () => clearTimeout(timer);
-        }
-    }, [currentQuestionIndex, preferredVoice]); // Added preferredVoice dependency
-
-    const speakText = (text) => {
-        if (!synthesisRef.current) return;
-        synthesisRef.current.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-
-        if (preferredVoice) {
-            utterance.voice = preferredVoice;
-        }
-
-        // Slightly faster rate for "Rapid Fire" feel, but not too fast
-        utterance.rate = 1.1;
-        utterance.pitch = 1.05; // Slightly higher pitch often sounds clearer/more feminine if generic
-
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => setIsSpeaking(false);
-        synthesisRef.current.speak(utterance);
-    };
-
     const handleNext = () => {
         // Combine final and any remaining interim text
         const fullAnswer = (transcript + ' ' + interimTranscript).trim();

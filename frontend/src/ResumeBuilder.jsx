@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-    ArrowLeft, ArrowRight, Plus, X, Sparkles, Download, Loader,
+    ArrowLeft, Plus, X, Sparkles, Download, Loader,
     User, Briefcase, GraduationCap, Code2, FolderOpen, Check,
     Mail, Phone, Linkedin, FileText, MapPin, Eye, EyeOff, Layout, Globe, GripVertical
 } from 'lucide-react';

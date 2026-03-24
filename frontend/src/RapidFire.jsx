@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Loader, AlertCircle, CheckCircle, BarChart3, Clock, Zap, Eye, Flame, Target, Award } from 'lucide-react';
 import { saveInterview } from './utils/historyManager';
@@ -232,36 +232,7 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
   const progress = ((currentQuestionIndex + 1) / interviewData.totalQuestions) * 100;
   const currentScore = allAnswers.length > 0 ? Math.round(allAnswers.reduce((a, b) => a + b.score, 0) / allAnswers.length) : 0;
 
-  // Timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          handleSubmit();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [currentQuestionIndex, answer]);
-
-  // Calculate adaptive difficulty
-  useEffect(() => {
-    if (allAnswers.length > 0) {
-      const avgScore = allAnswers.reduce((a, b) => a + b.score, 0) / allAnswers.length;
-      if (avgScore >= 8) {
-        setCurrentDifficulty('Hard');
-      } else if (avgScore >= 6) {
-        setCurrentDifficulty('Medium');
-      } else {
-        setCurrentDifficulty('Easy');
-      }
-    }
-  }, [allAnswers]);
-
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!answer.trim()) {
       setError('Please write an answer');
       return;
@@ -316,7 +287,38 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
         setFeedback(null);
       }, 400); // Very brief feedback transition
     }
-  };
+  }, [answer, currentQuestion, allAnswers, currentQuestionIndex, interviewData, onAnswer]);
+
+  // Timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          handleSubmit();
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentQuestionIndex, answer, handleSubmit]);
+
+  // Calculate adaptive difficulty
+  useEffect(() => {
+    if (allAnswers.length > 0) {
+      const avgScore = allAnswers.reduce((a, b) => a + b.score, 0) / allAnswers.length;
+      if (avgScore >= 8) {
+        setCurrentDifficulty('Hard');
+      } else if (avgScore >= 6) {
+        setCurrentDifficulty('Medium');
+      } else {
+        setCurrentDifficulty('Easy');
+      }
+    }
+  }, [allAnswers]);
+
+
 
   const getTimerColor = () => {
     if (timeLeft <= 10) return 'text-red-500';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader, AlertCircle, Brain, Sparkles } from 'lucide-react';
-import { signUpWithEmail, signInWithEmail, signInWithGoogle } from '../utils/supabaseClient';
+import { signUpWithEmail, signInWithEmail } from '../utils/supabaseClient';
 
 // ==================== AUTH PAGES ====================
 export default function AuthPages({ onAuthSuccess }) {
@@ -11,7 +11,6 @@ export default function AuthPages({ onAuthSuccess }) {
     const [fullName, setFullName] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [googleLoading, setGoogleLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
@@ -57,18 +56,7 @@ export default function AuthPages({ onAuthSuccess }) {
         }
     };
 
-    const handleGoogleAuth = async () => {
-        setError('');
-        setGoogleLoading(true);
-        try {
-            const { error: authError } = await signInWithGoogle();
-            if (authError) throw authError;
-            // Google OAuth redirects, so no need to handle success here
-        } catch (err) {
-            setError(err.message || 'Google sign-in failed');
-            setGoogleLoading(false);
-        }
-    };
+
 
     const pageVariants = {
         initial: { opacity: 0, x: mode === 'signup' ? 30 : -30 },
