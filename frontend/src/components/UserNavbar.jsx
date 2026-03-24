@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Brain, History, LogOut, User } from 'lucide-react';
+import { ArrowUpRight, Brain, History, LogOut, User } from 'lucide-react';
 
 export default function UserNavbar({ user, onLogout, onHome, onOpenHistory, onOpenAuth }) {
     const [showMenu, setShowMenu] = useState(false);
@@ -8,32 +8,48 @@ export default function UserNavbar({ user, onLogout, onHome, onOpenHistory, onOp
     const avatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null;
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-white/[0.06]">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
-                <div className="flex items-center">
-                    <button onClick={onHome} className="flex items-center gap-2 hover:opacity-80 transition">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.06] bg-[#050816]/72 backdrop-blur-2xl">
+            <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+                <div className="flex items-center gap-3">
+                    <button onClick={onHome} className="group flex items-center gap-3 transition">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 shadow-[0_12px_30px_rgba(37,99,235,0.28)]">
                             <Brain size={16} className="text-white" />
                         </div>
-                        <span className="text-white font-bold text-sm tracking-tight hidden sm:block">InterVue AI</span>
+                        <div className="hidden text-left sm:block">
+                            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.32em] text-cyan-300/75">Workspace</p>
+                            <p className="text-sm font-bold tracking-tight text-white group-hover:text-cyan-100">InterVue AI</p>
+                        </div>
                     </button>
                 </div>
 
-                <div className="relative">
+                <div className="relative flex items-center gap-2.5">
+                    {user && (
+                        <button
+                            onClick={onOpenHistory}
+                            className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-400/30 hover:bg-cyan-400/8 md:inline-flex"
+                        >
+                            <History size={14} className="text-cyan-300" />
+                            Dashboard
+                            <ArrowUpRight size={13} className="text-slate-500" />
+                        </button>
+                    )}
                     {user ? (
                         <>
                             <button
                                 onClick={() => setShowMenu(!showMenu)}
-                                className="flex items-center gap-2.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl transition"
+                                className="flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 transition hover:border-white/[0.14] hover:bg-white/[0.08]"
                             >
                                 {avatar ? (
-                                    <img src={avatar} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                                    <img src={avatar} alt="" className="h-8 w-8 rounded-xl object-cover ring-1 ring-white/10" />
                                 ) : (
-                                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/25 to-indigo-500/25">
                                         <User size={14} className="text-blue-300" />
                                     </div>
                                 )}
-                                <span className="text-white text-sm font-medium max-w-[120px] truncate hidden sm:block">{displayName}</span>
+                                <div className="hidden text-left sm:block">
+                                    <p className="max-w-[140px] truncate text-sm font-semibold text-white">{displayName}</p>
+                                    <p className="max-w-[160px] truncate text-[11px] text-slate-500">{user?.email}</p>
+                                </div>
                             </button>
 
                             {showMenu && (
@@ -42,24 +58,25 @@ export default function UserNavbar({ user, onLogout, onHome, onOpenHistory, onOp
                                     <motion.div
                                         initial={{ opacity: 0, y: -5, scale: 0.95 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        className="absolute right-0 top-12 w-52 py-1.5 rounded-xl border border-white/10 shadow-2xl z-50"
-                                        style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(20px)' }}
+                                        className="absolute right-0 top-14 z-50 w-60 rounded-2xl border border-white/10 py-1.5 shadow-2xl"
+                                        style={{ background: 'rgba(8,13,28,0.96)', backdropFilter: 'blur(24px)' }}
                                     >
-                                        <div className="px-4 py-2.5 border-b border-white/[0.06]">
-                                            <p className="text-white text-sm font-semibold truncate">{displayName}</p>
-                                            <p className="text-slate-500 text-xs truncate">{user?.email}</p>
+                                        <div className="border-b border-white/[0.06] px-4 py-3">
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300/70">Account</p>
+                                            <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+                                            <p className="truncate text-xs text-slate-500">{user?.email}</p>
                                         </div>
                                         <div className="p-1.5 space-y-1">
                                             <button
                                                 onClick={() => { setShowMenu(false); onOpenHistory ? onOpenHistory() : onHome(); }}
-                                                className="w-full px-3 py-2 text-left text-blue-400 hover:bg-blue-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-cyan-300 transition hover:bg-cyan-500/10"
                                             >
                                                 <History size={14} />
                                                 Dashboard
                                             </button>
                                             <button
                                                 onClick={() => { setShowMenu(false); onLogout(); }}
-                                                className="w-full px-3 py-2 text-left text-red-400 hover:bg-red-500/10 rounded-lg transition flex items-center gap-2 text-sm"
+                                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-red-300 transition hover:bg-red-500/10"
                                             >
                                                 <LogOut size={14} />
                                                 Sign Out
@@ -72,7 +89,7 @@ export default function UserNavbar({ user, onLogout, onHome, onOpenHistory, onOp
                     ) : (
                         <button
                             onClick={onOpenAuth}
-                            className="px-5 py-2 min-w-[120px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-xl transition shadow-lg shadow-blue-500/20"
+                            className="min-w-[128px] rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_32px_rgba(34,211,238,0.18)] transition hover:from-cyan-400 hover:to-blue-500"
                         >
                             Log in
                         </button>

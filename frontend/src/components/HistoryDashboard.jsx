@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import {
     Clock, Award, Zap, Flame, Target, Trash2, ArrowLeft,
     TrendingUp, Calendar, Brain, BookOpen, Lightbulb,
-    Trophy, Sparkles, ChevronRight
+    Trophy, Sparkles, ChevronRight, Activity, LayoutDashboard,
+    Rocket, ShieldCheck
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -274,6 +275,111 @@ function Achievements({ achievements }) {
     );
 }
 
+function DashboardHero({ stats, learningData, hasCloudData, onBack, onStartRapidFire }) {
+    const readiness = learningData?.xp?.level?.name || 'Momentum Building';
+    const topRole = Object.entries(stats.roleBreakdown || {})[0]?.[0] || 'General Practice';
+    const focusArea = learningData?.weak_areas?.[0]?.area || 'Consistency';
+
+    const heroMetrics = [
+        { label: 'Sessions completed', value: stats.totalInterviews || 0, icon: LayoutDashboard, tone: 'text-cyan-300' },
+        { label: 'Current streak', value: `${learningData?.streak || stats.streakDays || 0}d`, icon: Flame, tone: 'text-orange-300' },
+        { label: 'Top track', value: topRole, icon: Rocket, tone: 'text-emerald-300' },
+        { label: 'Mode source', value: hasCloudData ? 'Synced cloud' : 'Local device', icon: ShieldCheck, tone: 'text-blue-300' },
+    ];
+
+    return (
+        <div className="mb-8 grid gap-5 xl:grid-cols-[1.4fr_0.86fr]">
+            <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative overflow-hidden rounded-[28px] border border-cyan-400/14 bg-[linear-gradient(135deg,rgba(11,19,39,0.96),rgba(8,16,34,0.82)_42%,rgba(20,78,140,0.25)_100%)] p-7 shadow-[0_22px_80px_rgba(8,15,35,0.55)]"
+            >
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.18),transparent_24%)]" />
+                <div className="relative">
+                    <div className="mb-6 flex flex-wrap items-center gap-3">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1.5 text-xs font-semibold text-cyan-200">
+                            <Activity size={13} />
+                            Live performance workspace
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-slate-300">
+                            Focus area: {focusArea}
+                        </span>
+                    </div>
+                    <div className="max-w-3xl">
+                        <h1 className="mb-3 text-4xl font-extrabold tracking-tight text-white md:text-5xl">
+                            Turn interview practice into a repeatable system.
+                        </h1>
+                        <p className="max-w-2xl text-sm leading-7 text-slate-300 md:text-[15px]">
+                            Your dashboard now behaves more like a SaaS workspace: synced progress, visible weak spots,
+                            and direct next actions instead of a plain history list.
+                        </p>
+                    </div>
+                    <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {heroMetrics.map((item) => (
+                            <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <item.icon size={16} className={item.tone} />
+                                    <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Signal</span>
+                                </div>
+                                <p className="mb-1 text-lg font-bold text-white">{item.value}</p>
+                                <p className="text-xs text-slate-500">{item.label}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </motion.div>
+
+            <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08 }}
+                className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,13,28,0.95),rgba(8,13,28,0.8))] p-6 shadow-[0_18px_60px_rgba(8,15,35,0.45)]"
+            >
+                <div className="mb-5 flex items-center justify-between">
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-500">Command Center</p>
+                        <h2 className="mt-2 text-2xl font-bold text-white">{readiness}</h2>
+                    </div>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400/20 to-blue-500/20">
+                        <Sparkles size={20} className="text-cyan-300" />
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <button
+                        onClick={onStartRapidFire}
+                        className="group flex w-full items-center justify-between rounded-2xl border border-cyan-400/18 bg-cyan-400/8 px-4 py-4 text-left transition hover:border-cyan-300/34 hover:bg-cyan-400/12"
+                    >
+                        <div>
+                            <p className="text-sm font-semibold text-white">Run a rapid-fire sprint</p>
+                            <p className="text-xs text-slate-400">Best when you want speed, pressure, and fresh scoring.</p>
+                        </div>
+                        <ChevronRight size={18} className="text-cyan-300 transition group-hover:translate-x-1" />
+                    </button>
+                    <button
+                        onClick={onBack}
+                        className="group flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition hover:border-white/18 hover:bg-white/[0.06]"
+                    >
+                        <div>
+                            <p className="text-sm font-semibold text-white">Return to main workspace</p>
+                            <p className="text-xs text-slate-500">Jump back into standard interview, resume scorer, or builder.</p>
+                        </div>
+                        <ChevronRight size={18} className="text-slate-400 transition group-hover:translate-x-1 group-hover:text-white" />
+                    </button>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Operator note</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                        Highest leverage next move: improve <span className="font-semibold text-white">{focusArea}</span> while maintaining your
+                        recent average of <span className="font-semibold text-cyan-200">{stats.averageScore}/10</span>.
+                    </p>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
 // ==================== MAIN HISTORY DASHBOARD ====================
 export default function HistoryDashboard({ onBack, onStartRapidFire }) {
     const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -341,49 +447,31 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 overflow-hidden">
+        <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_18%),linear-gradient(180deg,#07101f_0%,#040814_45%,#02040b_100%)]">
             {/* Animated background */}
             <div className="fixed inset-0 overflow-hidden -z-10">
-                <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }}></div>
+                <div className="absolute -top-40 right-[-8rem] h-96 w-96 rounded-full bg-cyan-500/18 blur-3xl animate-pulse"></div>
+                <div className="absolute bottom-[-9rem] left-[-7rem] h-[26rem] w-[26rem] rounded-full bg-blue-600/16 blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
             </div>
 
-            <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
+            <div className="relative z-10 mx-auto max-w-7xl px-4 py-8">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-8">
+                <div className="mb-8 flex items-center justify-between">
                     <button
                         onClick={onBack}
-                        className="text-slate-400 hover:text-white transition flex items-center gap-2 group text-sm px-3 py-1.5 hover:bg-white/5 rounded-xl"
+                        className="group flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm text-slate-300 transition hover:border-cyan-300/20 hover:bg-white/[0.08] hover:text-white"
                     >
                         <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                         Back Home
                     </button>
                     <button
                         onClick={() => setShowClearConfirm(true)}
-                        className="text-slate-500 hover:text-red-400 transition flex items-center gap-2 text-sm"
+                        className="flex items-center gap-2 text-sm text-slate-500 transition hover:text-red-300"
                     >
                         <Trash2 size={16} />
-                        Clear History
+                        Reset local history
                     </button>
                 </div>
-
-                {/* Title */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center mb-10"
-                >
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full mb-5">
-                        <Sparkles size={14} className="text-blue-400" />
-                        <span className="text-blue-300 text-xs font-medium">Personalized Insights Dashboard</span>
-                    </div>
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight">
-                        Your Professional Dashboard
-                    </h1>
-                    <p className="text-slate-400 max-w-xl mx-auto text-sm">
-                        Track skills, earn XP, unlock achievements, and get personalized recommendations
-                    </p>
-                </motion.div>
 
                 {loading ? (
                     <div className="text-center py-20">
@@ -407,7 +495,7 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                             </p>
                             <button
                                 onClick={onBack}
-                                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-500/10 transition-all text-sm"
+                                className="rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/10 transition-all hover:from-cyan-400 hover:to-blue-500"
                             >
                                 Start Practicing
                             </button>
@@ -415,6 +503,14 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                     </motion.div>
                 ) : (
                     <>
+                        <DashboardHero
+                            stats={stats}
+                            learningData={learningData}
+                            hasCloudData={hasCloudData}
+                            onBack={onBack}
+                            onStartRapidFire={onStartRapidFire}
+                        />
+
                         {/* XP Level Bar */}
                         <XPLevelBar xpData={learningData?.xp} />
 
