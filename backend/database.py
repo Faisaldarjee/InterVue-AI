@@ -6,6 +6,7 @@ Handles all database operations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -16,8 +17,11 @@ except ImportError:
     Client = Any
     create_client = None
 
-load_dotenv()
 logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 # ==================== SUPABASE CLIENT ====================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -47,11 +51,41 @@ def get_profile(user_id: str):
     if not _db_available():
         return None
     try:
-        result = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
-        return result.data
+        result = (
+            supabase.table("profiles")
+            .select("*")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else None
     except Exception as e:
         logger.error(f"Failed to get profile: {e}")
         return None
+
+
+def ensure_profile(user: dict):
+    """Ensure a profile row exists for an authenticated Supabase user."""
+    if not _db_available() or not user or not user.get("id"):
+        return None
+
+    existing = get_profile(user["id"])
+    if existing:
+        return existing
+
+    try:
+        payload = {
+            "id": user["id"],
+            "full_name": user.get("name", "") or "",
+            "avatar_url": user.get("avatar", "") or "",
+        }
+        result = supabase.table("profiles").upsert(payload).execute()
+        data = result.data or []
+        return data[0] if data else payload
+    except Exception as e:
+        logger.error(f"Failed to ensure profile: {e}")
+        return existing
 
 
 def update_profile(user_id: str, data: dict):

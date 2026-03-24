@@ -25,7 +25,7 @@ from database import (
     get_profile, save_interview as db_save_interview,
     get_user_interviews, get_user_stats, save_resume as db_save_resume,
     get_user_resumes, upload_resume_file, save_questions_to_bank,
-    get_question_bank_count
+    get_question_bank_count, ensure_profile
 )
 from learning import get_full_learning_data
 from rate_limiter import rate_limiter
@@ -890,7 +890,7 @@ async def get_analytics():
 async def get_user_profile(user: dict = Depends(get_current_user)):
     """Get current user's profile"""
     try:
-        profile = get_profile(user['id'])
+        profile = ensure_profile(user) or get_profile(user['id'])
         return {
             "status": "success",
             "profile": profile,
@@ -951,6 +951,7 @@ async def save_user_interview(
 ):
     """Save a completed interview to user's history"""
     try:
+        ensure_profile(user)
         result = db_save_interview(user['id'], request.dict())
         if result:
             return {"status": "success", "interview": result}
