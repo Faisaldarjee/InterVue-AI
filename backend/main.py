@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from llm_service import EnhancedLLMService
 from resume_parser import ResumeParser
 from rapid_fire_mode import RapidFireMode
-from models import Answer, InterviewSession, RapidFireStartRequest
+from models import Answer, InterviewSession, RapidFireStartRequest, StandardInterviewSubmitRequest
 from auth import get_current_user, get_optional_user
 from database import (
     get_profile, save_interview as db_save_interview,
@@ -189,7 +189,7 @@ async def upload_resume(
         
         # ENHANCED: Analyze resume and determine optimal question count
         logger.info("🤖 Analyzing resume and job match...")
-        analysis = llm.analyze_resume_and_job(resume_text, job_description)
+        analysis = llm.analyze_resume_and_job(resume_text, job_description, job_role)
         
         num_questions = analysis.get('suggested_questions', 4)
         difficulty = analysis.get('question_difficulty', 'Medium')
@@ -260,6 +260,7 @@ async def upload_resume(
             "session_id": session_id,
             "analysis": analysis,
             "first_question": questions[0] if questions else None,
+            "questions_list": questions,
             "total_questions": len(questions),
             "difficulty": difficulty,
             "learning_focus": analysis.get('learning_focus', 'General preparation'),
@@ -276,6 +277,105 @@ async def upload_resume(
         raise
     except Exception as e:
         logger.error(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/interview/final-submit")
+async def submit_standard_interview_batch(request: StandardInterviewSubmitRequest):
+    """
+    Final batch evaluation for Standard Mode.
+    Frontend collects answers locally and submits once at the end.
+    """
+    try:
+        if request.session_id not in sessions:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if not llm:
+            raise HTTPException(status_code=503, detail="LLM service unavailable")
+
+        session = sessions[request.session_id]
+        if session.mode == "rapid_fire":
+            raise HTTPException(status_code=400, detail="Use rapid-fire batch endpoint for rapid fire sessions")
+
+        if not request.answers:
+            raise HTTPException(status_code=400, detail="No answers submitted")
+
+        evaluated_answers = []
+        for idx, item in enumerate(request.answers):
+            if idx >= len(session.questions):
+                break
+
+            question = session.questions[idx]
+            answer_text = str(item.get("answer", "")).strip()
+            if not answer_text:
+                answer_text = "No answer provided."
+
+            evaluation = llm.evaluate_answer_with_feedback(
+                question.get("question", ""),
+                answer_text,
+                question.get("type", "General"),
+                question.get("sample_answer_points", []),
+            )
+
+            evaluated_answers.append({
+                "question": question.get("question", ""),
+                "answer": answer_text,
+                "evaluation": evaluation,
+                "question_details": {
+                    "type": question.get("type"),
+                    "difficulty": question.get("difficulty"),
+                    "key_topic": question.get("key_topic"),
+                    "why_asked": question.get("why_asked"),
+                    "interview_phase": question.get("interview_phase"),
+                    "interviewer_goal": question.get("interviewer_goal"),
+                },
+            })
+
+        if not evaluated_answers:
+            raise HTTPException(status_code=400, detail="No valid answers to evaluate")
+
+        session.answers = evaluated_answers
+        session.current_question_index = len(evaluated_answers)
+        session.completed_at = datetime.now()
+
+        avg_score = sum(a["evaluation"].get("score", 0) for a in evaluated_answers) / len(evaluated_answers)
+        learning_report = llm.generate_learning_report(
+            evaluated_answers,
+            session.analysis,
+            session.job_role
+        )
+        final_report = llm.generate_final_report(
+            evaluated_answers,
+            int(round(avg_score)),
+            session.analysis
+        )
+
+        session.final_report = final_report
+        analytics["completed_interviews"] += 1
+        analytics["average_score"] = (
+            (analytics["average_score"] * (analytics["completed_interviews"] - 1) + avg_score)
+            / analytics["completed_interviews"]
+        )
+        analytics["questions_answered"] += len(evaluated_answers)
+
+        return {
+            "status": "completed",
+            "final_report": final_report,
+            "learning_report": learning_report,
+            "interview_summary": {
+                "total_questions": len(evaluated_answers),
+                "average_score": round(avg_score, 2),
+                "duration": str(session.completed_at - session.started_at),
+                "difficulty_level": session.analysis.get('question_difficulty'),
+                "estimated_readiness": learning_report.get('estimated_readiness', '2 weeks prep')
+            },
+            "evaluations": evaluated_answers,
+            "next_steps": learning_report.get('next_steps', [])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Standard batch submit error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     except Exception as e:
@@ -377,7 +477,7 @@ async def start_rapid_fire(
         
         # Generate questions
         num_q = max(3, min(request.num_questions, 20))
-        questions = rapid_fire.generate_rapid_fire_questions(llm, request.job_role, num_q)
+        questions = rapid_fire.generate_rapid_fire_questions(llm, request.job_role, num_q, request.difficulty)
         config = rapid_fire.get_config()
         
         # Save generated questions to question bank
@@ -398,7 +498,7 @@ async def start_rapid_fire(
                 role_questions = rapid_fire.questions_db.get(role, [])
                 if len(role_questions) < 20:
                     logger.info(f"📦 Auto-expanding question bank for '{role}' ({len(role_questions)} → 50)...")
-                    new_qs = llm.generate_batch_questions(role, num_questions=30)
+                    new_qs = llm.generate_batch_questions(role, num_questions=30, difficulty=request.difficulty.title())
                     if new_qs:
                         save_questions_to_bank(role, new_qs)
                         # Reload into memory
@@ -532,7 +632,7 @@ async def submit_rapid_fire_batch(request: RapidFireBatchRequest):
                 "type": "Technical" # Rapid Fire is mostly technical
             })
             
-        # Perform Batch Evaluation (Powered by Groq)
+        # Perform Batch Evaluation
         evaluation = llm.evaluate_interview_batch(batch_data, request.job_role)
         
         # Prepare standardized final report

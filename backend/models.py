@@ -77,3 +77,9 @@ class RapidFireStartRequest(BaseModel):
     job_role: str
     difficulty: str = "medium"
     num_questions: int = 10
+
+
+class StandardInterviewSubmitRequest(BaseModel):
+    """Batch submit standard interview answers"""
+    session_id: str
+    answers: List[Dict[str, Any]]

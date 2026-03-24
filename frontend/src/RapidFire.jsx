@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Loader, AlertCircle, CheckCircle, BarChart3, Clock, Zap, Eye, Flame, Target, Award } from 'lucide-react';
-import axios from 'axios';
 import { saveInterview } from './utils/historyManager';
-import { saveInterviewToDB } from './utils/apiClient';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { saveInterviewToDB, startRapidFireSession, submitRapidFireBatch } from './utils/apiClient';
+import { buildInterviewRecord } from './utils/interviewData';
 
 
 // ==================== NOTIFICATION ====================
@@ -45,19 +43,19 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
 
     try {
       // We use the SAME endpoint to get questions, just route differently after
-      const response = await axios.post(`${API_URL}/start-rapid-fire`, {
+      const response = await startRapidFireSession({
         job_role: jobRole,
         difficulty: "medium",
         num_questions: questionCount
-      }, { timeout: 60000 });
+      });
 
       const sessionData = {
-        interviewId: response.data.interview_id,
+        interviewId: response.interview_id,
         jobRole: jobRole,
-        config: response.data.config,
-        firstQuestion: response.data.first_question,
-        questions: response.data.questions_list || [], // Backend needs to send list for Voice Mode
-        totalQuestions: questionCount
+        config: response.config,
+        firstQuestion: response.first_question,
+        questions: response.questions_list || [],
+        totalQuestions: response.total_questions || questionCount
       };
 
       if (mode === 'voice') {
@@ -67,7 +65,7 @@ function RapidFireStart({ onStart, onBack, onStartVoice }) {
       }
 
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to start rapid fire');
+      setError(err.response?.data?.detail || 'Failed to start rapid fire');
     } finally {
       setLoading(false);
     }
@@ -282,23 +280,19 @@ function RapidFireInterview({ interviewData, onAnswer, onBack }) {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.post(
-          `${API_URL}/api/rapid-fire/batch-submit`,
-          {
-            items: updatedAnswers,
-            job_role: interviewData.jobRole,
-            session_id: interviewData.interviewId
-          },
-          { timeout: 90000 }
-        );
+        const response = await submitRapidFireBatch({
+          items: updatedAnswers,
+          job_role: interviewData.jobRole,
+          session_id: interviewData.interviewId
+        });
 
         onAnswer({
           isComplete: true,
-          results: response.data.results,
+          results: response.results,
           allAnswers: updatedAnswers
         });
       } catch (err) {
-        setError(err.response?.data?.error || 'Failed to generate final report. Please try again.');
+        setError(err.response?.data?.detail || 'Failed to generate final report. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -669,22 +663,19 @@ export default function RapidFire({ onBack, onStartVoice }) {
       setStage('results');
 
       // Save to local history
-      saveInterview({
-        mode: 'rapid-fire',
+      const record = buildInterviewRecord({
+        mode: 'rapid_fire',
         jobRole: interviewData?.jobRole || 'Unknown',
-        score: response.results?.average_score || 0,
-        questionsCount: response.results?.total_questions || 10,
+        result: response,
+        answers: response.allAnswers || [],
+        durationSeconds: Math.round(response.results?.total_time_seconds || 0),
       });
+      saveInterview(record);
 
       // Save to Supabase DB
       saveInterviewToDB({
-        mode: 'rapid-fire',
-        job_role: interviewData?.jobRole || 'Unknown',
-        score: response.results?.average_score || 0,
-        final_report: response.results || {},
-        questions: [],
-        answers: [],
-        duration_seconds: Math.round(response.results?.total_time_seconds || 0),
+        ...record,
+        job_role: record.jobRole,
       });
     }
   };

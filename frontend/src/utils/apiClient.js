@@ -70,4 +70,39 @@ export async function fetchLearningData() {
     return data;
 }
 
+export async function analyzeResumeFile(formData) {
+    const { data } = await apiClient.post('/analyze-resume', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+}
+
+export async function startRapidFireSession(payload) {
+    const { data } = await apiClient.post('/start-rapid-fire', payload, {
+        timeout: 60000,
+    });
+    return data;
+}
+
+export async function submitRapidFireBatch(payload) {
+    const { data } = await apiClient.post('/api/rapid-fire/batch-submit', payload, {
+        timeout: 90000,
+    });
+    return data;
+}
+
+export async function submitVoiceInterviewBatch(payload) {
+    const { data } = await apiClient.post('/submit-voice-batch', payload, {
+        timeout: 90000,
+    });
+    return data;
+}
+
+export async function submitStandardInterviewBatch(payload) {
+    const { data } = await apiClient.post('/api/interview/final-submit', payload, {
+        timeout: 120000,
+    });
+    return data;
+}
+
 export default apiClient;

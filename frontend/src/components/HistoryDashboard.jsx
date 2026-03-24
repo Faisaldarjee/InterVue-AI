@@ -13,6 +13,7 @@ import {
 import GlassCard, { GlassStatCard } from './GlassCard';
 import { getHistory, getStats, clearHistory } from '../utils/historyManager';
 import { fetchStats, fetchInterviews, fetchLearningData } from '../utils/apiClient';
+import { normalizeCloudStats, normalizeHistoryItem } from '../utils/interviewData';
 import { staggerContainer, staggerItem } from './PageTransition';
 
 // ==================== CUSTOM TOOLTIP ====================
@@ -310,33 +311,9 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
     // Seamless merge: cloud data takes priority, local as fallback
     const hasCloudData = cloudStats && cloudStats.total_interviews > 0;
 
-    const stats = hasCloudData ? {
-        totalInterviews: cloudStats.total_interviews || 0,
-        averageScore: cloudStats.average_score || 0,
-        bestScore: cloudStats.best_score || 0,
-        totalQuestions: cloudStats.total_questions || 0,
-        recentScores: (cloudStats.recent_scores || []).map(s => ({
-            date: s.date,
-            score: s.score,
-            mode: s.mode,
-        })),
-        modeBreakdown: {
-            standard: cloudStats.mode_breakdown?.standard || 0,
-            rapidFire: cloudStats.mode_breakdown?.['rapid-fire'] || 0,
-            voice: cloudStats.mode_breakdown?.voice || 0,
-        },
-        roleBreakdown: cloudStats.role_breakdown || {},
-        streakDays: cloudStats.streak_days || 0,
-    } : localStats;
+    const stats = hasCloudData ? normalizeCloudStats(cloudStats) : localStats;
 
-    const history = hasCloudData ? cloudInterviews.map(i => ({
-        id: i.id,
-        timestamp: i.created_at,
-        mode: i.mode,
-        jobRole: i.job_role,
-        score: i.score,
-        questionsCount: (i.answers || []).length || (i.questions || []).length,
-    })) : localHistory;
+    const history = hasCloudData ? cloudInterviews.map(normalizeHistoryItem) : localHistory;
 
     const COLORS = ['#3B82F6', '#EF4444', '#06B6D4'];
     const modeData = [
@@ -357,7 +334,7 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
     };
 
     const handleRecAction = (action) => {
-        if (action === 'rapid-fire' && onStartRapidFire) {
+        if ((action === 'rapid-fire' || action === 'rapid_fire') && onStartRapidFire) {
             onStartRapidFire();
         } else if (action === 'resume') {
             onBack && onBack();
@@ -663,14 +640,14 @@ export default function HistoryDashboard({ onBack, onStartRapidFire }) {
                                             className="hover:bg-white/5 transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-2 h-2 rounded-full ${item.mode === 'rapid-fire' ? 'bg-red-400' :
+                                                <div className={`w-2 h-2 rounded-full ${item.mode === 'rapid_fire' ? 'bg-red-400' :
                                                     item.mode === 'voice' ? 'bg-cyan-400' : 'bg-blue-400'
                                                     }`} />
                                                 <div>
                                                     <p className="text-white text-sm font-medium">
                                                         {item.jobRole || item.job_role || 'Interview'}
                                                         <span className="text-slate-500 ml-2 text-xs capitalize">
-                                                            ({item.mode === 'rapid-fire' ? '🔥 Rapid Fire' : item.mode === 'voice' ? '🎤 Voice' : '📝 Standard'})
+                                                            ({item.mode === 'rapid_fire' ? '🔥 Rapid Fire' : item.mode === 'voice' ? '🎤 Voice' : '📝 Standard'})
                                                         </span>
                                                     </p>
                                                     <p className="text-slate-500 text-xs">

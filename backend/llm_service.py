@@ -1,48 +1,45 @@
 # -*- coding: utf-8 -*-
 """
-Enhanced LLM Service - PRODUCTION Version
-With proper cache separation (Questions vs Analysis)
-Fixed: Import errors resolved
+Enhanced LLM Service
 """
 
-import google.generativeai as genai
-import os
 import json
-import re
 import logging
+import os
+import re
 import time
 from datetime import datetime, timedelta
 
+import google.generativeai as genai
+
 logger = logging.getLogger(__name__)
 
-# Import advanced cache system - WITH ERROR HANDLING
 try:
     from advanced_smart_cache import advanced_cache
     CACHE_ENABLED = True
-    logger.info("✅ Advanced smart cache system loaded")
 except ImportError as e:
-    logger.warning(f"⚠️ Cache system not available: {e}. Caching disabled.")
+    logger.warning(f"Cache system not available: {e}. Caching disabled.")
     CACHE_ENABLED = False
     advanced_cache = None
 
 
 class EnhancedLLMService:
     def __init__(self):
-        """Initialize Gemini AI with enhanced capabilities"""
-        self.main_api_key = os.getenv('GEMINI_API_KEY')
-        self.resume_api_key = os.getenv('GEMINI_RESUME_API_KEY')
-        
+        self.main_api_key = os.getenv("GEMINI_API_KEY")
+        self.resume_api_key = os.getenv("GEMINI_RESUME_API_KEY")
+
         if not self.main_api_key:
             raise ValueError("GEMINI_API_KEY not found in .env")
-        
+
         genai.configure(api_key=self.main_api_key)
 
-        preferred_model = os.getenv('GEMINI_MODEL', 'models/gemini-1.5-flash')
+        preferred_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
         fallback_models = [
             preferred_model,
-            'models/gemini-1.5-flash',
-            'models/gemini-1.5-pro',
-            'models/gemini-pro'
+            "models/gemini-2.0-flash",
+            "models/gemini-2.0-flash-lite",
+            "models/gemini-2.5-flash",
+            "models/gemini-2.5-pro",
         ]
 
         self.model = None
@@ -59,306 +56,308 @@ class EnhancedLLMService:
         if self.model is None:
             raise RuntimeError(f"Unable to initialize any Gemini model: {last_error}")
 
-        self.cache_stats = {'total_requests': 0, 'cache_hits': 0, 'api_calls': 0}
-
-        # API Budget Tracker
-        self._api_calls_log = []  # timestamps of API calls
-        self._hourly_limit = int(os.getenv('GEMINI_HOURLY_LIMIT', '55'))  # safe default under free tier 60/hr
-        logger.info(f"⚡ API budget: {self._hourly_limit} calls/hour")
-
-    # ==================== RETRY & BUDGET ====================
+        self.cache_stats = {"total_requests": 0, "cache_hits": 0, "api_calls": 0}
+        self._api_calls_log = []
+        self._hourly_limit = int(os.getenv("GEMINI_HOURLY_LIMIT", "55"))
 
     def _check_budget(self) -> bool:
-        """Check if we have API budget remaining this hour"""
         cutoff = datetime.now() - timedelta(hours=1)
         self._api_calls_log = [t for t in self._api_calls_log if t > cutoff]
         remaining = self._hourly_limit - len(self._api_calls_log)
         if remaining <= int(self._hourly_limit * 0.2):
-            logger.warning(f"⚠️ API budget low: {remaining}/{self._hourly_limit} calls left this hour")
+            logger.warning(f"API budget low: {remaining}/{self._hourly_limit} calls left this hour")
         return remaining > 0
 
     def _record_api_call(self):
-        """Record an API call for budget tracking"""
         self._api_calls_log.append(datetime.now())
-        self.cache_stats['api_calls'] += 1
+        self.cache_stats["api_calls"] += 1
 
     def get_budget_status(self) -> dict:
-        """Get current API budget status"""
         cutoff = datetime.now() - timedelta(hours=1)
         self._api_calls_log = [t for t in self._api_calls_log if t > cutoff]
         used = len(self._api_calls_log)
         return {
-            'used_this_hour': used,
-            'limit': self._hourly_limit,
-            'remaining': self._hourly_limit - used,
-            'percent_used': round(used / self._hourly_limit * 100, 1) if self._hourly_limit > 0 else 0
+            "used_this_hour": used,
+            "limit": self._hourly_limit,
+            "remaining": self._hourly_limit - used,
+            "percent_used": round(used / self._hourly_limit * 100, 1) if self._hourly_limit > 0 else 0,
         }
 
     def _call_with_retry(self, prompt: str, max_retries: int = 3, use_resume_key: bool = False) -> str:
-        """
-        Centralized LLM call with exponential backoff retry.
-        Returns raw response text or None on total failure.
-        """
         if not self._check_budget():
-            logger.error("🚫 API budget exhausted for this hour. Using defaults.")
+            logger.error("API budget exhausted for this hour. Using defaults.")
             return None
 
-        # Switch API key if needed
         if use_resume_key and self.resume_api_key:
             genai.configure(api_key=self.resume_api_key)
 
-        last_error = None
         for attempt in range(max_retries):
             try:
                 response = self.model.generate_content(prompt)
                 self._record_api_call()
-
-                # Restore main key if we switched
                 if use_resume_key and self.resume_api_key:
                     genai.configure(api_key=self.main_api_key)
-
                 return response.text
-
             except Exception as e:
-                last_error = e
                 error_str = str(e).lower()
                 is_retryable = any(k in error_str for k in [
-                    'resource exhausted', '429', '503', 'unavailable',
-                    'deadline', 'timeout', 'quota', 'rate'
+                    "resource exhausted", "429", "503", "unavailable", "deadline", "timeout", "quota", "rate"
                 ])
-
                 if is_retryable and attempt < max_retries - 1:
-                    wait = (2 ** attempt)  # 1s, 2s, 4s
-                    logger.warning(f"⚠️ API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
+                    wait = 2 ** attempt
+                    logger.warning(f"API call failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
                     time.sleep(wait)
-                else:
-                    # Final fallback to Groq if Gemini is exhausted
-                    if "429" in str(e) or "ResourceExhausted" in str(e) or "503" in str(e):
-                        logger.info("🔮 429 Detected - Kicking off Groq Llama 3.3 Fallback...")
-                        try:
-                            from groq_service import GroqJobService
-                            groq = GroqJobService()
-                            if groq.client:
-                                result = groq._chat("You are a expert interviewer providing helpful feedback. Output ONLY valid JSON matching the schema.", prompt, max_tokens=2000)
-                                if "raw" not in result:
-                                    logger.info("✅ Groq Fallback successful")
-                                    # Since we need a string back to fit existing _parse_json_response flow
-                                    import json
-                                    return json.dumps(result)
-                        except Exception as ge:
-                            logger.error(f"❌ Groq Fallback and Gemini both failed: {ge}")
+                    continue
 
-                    logger.error(f"❌ API call failed permanently: {e}")
-                    break
+                logger.error(f"API call failed permanently: {e}")
+                break
 
-        # Restore main key on failure path
         if use_resume_key and self.resume_api_key:
             genai.configure(api_key=self.main_api_key)
-
         return None
 
     def _clean_json_text(self, text: str) -> str:
-        """Remove markdown code blocks and clean up JSON"""
         text = text.strip()
         text = re.sub(r"^```\w*\n", "", text)
         text = re.sub(r"\n```$", "", text)
         text = re.sub(r"^```", "", text)
         text = re.sub(r"```$", "", text)
-        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+        text = "".join(char for char in text if ord(char) >= 32 or char in "\n\r\t")
         return text.strip()
 
-    def _parse_json_response(self, text: str) -> dict:
-        """Safely parse JSON response with fallback"""
+    def _parse_json_response(self, text: str):
         try:
-            cleaned = self._clean_json_text(text)
-            result = json.loads(cleaned)
-            return result
-        except json.JSONDecodeError as e:
+            return json.loads(self._clean_json_text(text))
+        except Exception as e:
             logger.error(f"JSON parse error: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Parse error: {e}")
-            return None
 
-    def analyze_resume_and_job(self, resume_text: str, job_description: str) -> dict:
-        """Analyze resume against job with ANALYSIS CACHE"""
-        self.cache_stats['total_requests'] += 1
-        
-        # TRY ANALYSIS CACHE FIRST
-        if CACHE_ENABLED:
-            logger.info("🔍 Checking analysis cache...")
-            try:
-                cached_analysis = advanced_cache.get_exact_analysis(job_description)
-                
-                if cached_analysis:
-                    logger.info(f"✅ ANALYSIS CACHE HIT - Using cached analysis")
-                    self.cache_stats['cache_hits'] += 1
-                    return cached_analysis
-            except Exception as e:
-                logger.warning(f"Cache lookup failed: {e}")
-        
-        # NOT CACHED, CALL API
-        logger.info("🚀 Calling Gemini API for new analysis...")
-        
-        prompt = f"""Analyze this resume against the job description. Return ONLY valid JSON.
+    def _normalize_question(self, question: dict, fallback_difficulty: str) -> dict:
+        return {
+            "question": question.get("question", "Tell me about a project you owned recently."),
+            "type": question.get("type", "General"),
+            "difficulty": question.get("difficulty", fallback_difficulty),
+            "why_asked": question.get("why_asked", "To assess your experience and judgment."),
+            "sample_answer_points": question.get("sample_answer_points", ["Context", "Action", "Impact"]),
+            "key_topic": question.get("key_topic", "General"),
+            "requires_code": bool(question.get("requires_code", False)),
+            "interview_phase": question.get("interview_phase", "core"),
+            "interviewer_goal": question.get("interviewer_goal", "Assess depth, clarity, and evidence."),
+            "time_guidance": question.get("time_guidance", "60-90 seconds"),
+        }
 
-RESUME:
-{resume_text[:1500]}
+    def _shape_standard_flow(self, questions: list, difficulty: str, num_questions: int) -> list:
+        phase_order = {
+            "warmup": 0,
+            "resume": 0,
+            "core": 1,
+            "technical": 1,
+            "scenario": 2,
+            "behavioral": 3,
+            "closing": 4,
+        }
+        ordered = sorted(
+            questions,
+            key=lambda item: (
+                phase_order.get(str(item.get("interview_phase", "core")).lower(), 2),
+                {"Easy": 0, "Medium": 1, "Hard": 2}.get(str(item.get("difficulty", difficulty)).title(), 1),
+            ),
+        )
+        if ordered:
+            ordered[0]["interview_phase"] = "warmup"
+            ordered[0]["time_guidance"] = ordered[0].get("time_guidance") or "45-60 seconds"
+        return ordered[:num_questions]
+
+    def analyze_resume_and_job(self, resume_text: str, job_description: str, job_role: str = "General") -> dict:
+        self.cache_stats["total_requests"] += 1
+
+        prompt = f"""You are a senior hiring manager preparing an interview plan for a {job_role} candidate.
+Read every line of the resume carefully. Cross-reference it against the job description.
+Your goal: figure out exactly where to probe this candidate so the interview feels real and specific.
+
+RESUME (read every line):
+{resume_text[:2000]}
 
 JOB DESCRIPTION:
 {job_description[:1000]}
 
-Return this exact JSON format (no extra text, no markdown):
-{{"compatibility_score": 75, "skill_match": 80, "experience_level": "Mid", "gaps": ["gap1", "gap2"], "strengths": ["strength1", "strength2"], "suggested_questions": 4, "question_difficulty": "Medium", "key_topics": ["topic1", "topic2"], "learning_focus": "what to study", "summary": "brief summary"}}
+Return ONLY valid JSON:
+{{"compatibility_score": 75, "skill_match": 80, "experience_level": "Mid", "gaps": ["gap1", "gap2"], "strengths": ["strength1", "strength2"], "suggested_questions": 5, "question_difficulty": "Medium", "key_topics": ["topic1", "topic2"], "learning_focus": "what to study", "candidate_story": "one-line snapshot of who this candidate is", "interview_strategy": "how interviewer should probe this candidate", "summary": "brief summary", "challengeable_claims": ["specific resume claim that should be tested", "another claim"], "notable_projects": ["project name from resume"], "tech_stack": ["tech1", "tech2"]}}
 
-Fill in the values based on analysis. suggested_questions must be 3-6."""
+Rules:
+- suggested_questions must be 4-6
+- key_topics should reflect overlap and likely gaps
+- challengeable_claims: find 2-4 specific lines from the resume that an interviewer would want to verify (e.g. performance improvement claims, leadership claims, tool expertise)
+- notable_projects: extract actual project names or descriptions from the resume
+- tech_stack: list the specific technologies mentioned in the resume
+- interview_strategy should describe HOW to interview THIS specific person, not generic advice
+- infer which resume claims are most likely exaggerated or worth challenging"""
 
         try:
             response_text = self._call_with_retry(prompt)
             if response_text is None:
-                logger.warning("⚠️ Analysis API failed after retries")
                 return self._default_analysis()
 
             result = self._parse_json_response(response_text)
-            
-            result['compatibility_score'] = int(result.get('compatibility_score', 50))
-            result['skill_match'] = int(result.get('skill_match', 50))
-            result['suggested_questions'] = max(3, min(6, int(result.get('suggested_questions', 4))))
-            result['experience_level'] = result.get('experience_level', 'Mid')
-            result['question_difficulty'] = result.get('question_difficulty', 'Medium')
-            
-            if not isinstance(result.get('gaps'), list):
-                result['gaps'] = ['General preparation']
-            if not isinstance(result.get('strengths'), list):
-                result['strengths'] = ['Problem solving']
-            if not isinstance(result.get('key_topics'), list):
-                result['key_topics'] = ['general', 'technical']
-            
-            # SAVE TO ANALYSIS CACHE
-            if CACHE_ENABLED:
-                try:
-                    advanced_cache.save_analysis(analysis=result, job_description=job_description)
-                    advanced_cache.record_api_call()
-                    self.cache_stats['api_calls'] += 1
-                    logger.info(f"💾 Analysis cached for future use")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to cache analysis: {e}")
-            
-            logger.info(f"✅ Resume analysis complete: {result['suggested_questions']} questions recommended")
+            if result is None:
+                return self._default_analysis()
+
+            result["compatibility_score"] = int(result.get("compatibility_score", 50))
+            result["skill_match"] = int(result.get("skill_match", 50))
+            result["suggested_questions"] = max(4, min(6, int(result.get("suggested_questions", 5))))
+            result["experience_level"] = str(result.get("experience_level", "Mid"))
+            result["question_difficulty"] = str(result.get("question_difficulty", "Medium"))
+            result["gaps"] = result.get("gaps") if isinstance(result.get("gaps"), list) else ["General preparation"]
+            result["strengths"] = result.get("strengths") if isinstance(result.get("strengths"), list) else ["Problem solving"]
+            result["key_topics"] = result.get("key_topics") if isinstance(result.get("key_topics"), list) else ["general", "technical"]
+            result["candidate_story"] = str(result.get("candidate_story", "Candidate shows a mix of delivery experience and growth potential."))
+            result["interview_strategy"] = str(result.get("interview_strategy", "Start broad, then probe depth with concrete examples and tradeoffs."))
+            result["learning_focus"] = str(result.get("learning_focus", "Focus on technical depth and real-world examples"))
+            result["summary"] = str(result.get("summary", "Analysis completed."))
             return result
         except Exception as e:
-            logger.error(f"❌ Analysis failed: {e}")
+            logger.error(f"Analysis failed: {e}")
             return self._default_analysis()
 
     def _default_analysis(self) -> dict:
         return {
-            "compatibility_score": 50, "skill_match": 50, "experience_level": "Mid",
-            "gaps": ["Check manually"], "strengths": ["Experience"], "suggested_questions": 4,
-            "question_difficulty": "Medium", "key_topics": ["general", "technical", "behavioral"],
+            "compatibility_score": 50,
+            "skill_match": 50,
+            "experience_level": "Mid",
+            "gaps": ["Check manually"],
+            "strengths": ["Experience"],
+            "suggested_questions": 5,
+            "question_difficulty": "Medium",
+            "key_topics": ["general", "technical", "behavioral"],
             "learning_focus": "Focus on technical depth and real-world examples",
-            "summary": "Analysis unavailable - using defaults"
+            "candidate_story": "Candidate needs a balanced interview across technical depth and communication.",
+            "interview_strategy": "Start with resume validation, then move into role-specific scenarios and ownership questions.",
+            "summary": "Analysis unavailable - using defaults",
         }
 
     def generate_smart_questions(self, resume_text: str, job_role: str, job_description: str, num_questions: int, difficulty: str, key_topics: list) -> list:
-        """Generate adaptive questions with QUESTIONS CACHE"""
-        self.cache_stats['total_requests'] += 1
+        self.cache_stats["total_requests"] += 1
         topics_str = ", ".join(key_topics[:5]) if isinstance(key_topics, list) else "general"
-        
-        # TRY QUESTIONS CACHE
-        if CACHE_ENABLED:
-            logger.info("🧠 Checking questions cache...")
-            try:
-                cached_questions, strategy = advanced_cache.get_smart_response(
-                    job_role=job_role, job_description=job_description, difficulty=difficulty
-                )
-                
-                if cached_questions:
-                    self.cache_stats['cache_hits'] += 1
-                    logger.info(f"✅ QUESTIONS CACHE HIT ({strategy}): Using cached questions")
-                    return cached_questions[:num_questions]
-            except Exception as e:
-                logger.warning(f"Cache lookup failed: {e}")
-        
-        # NOT IN CACHE, GENERATE NEW
-        logger.info(f"🚀 Generating NEW questions for {job_role} ({difficulty})")
-        
-        prompt = f"""Generate {num_questions} interview questions for: {job_role}
 
-Resume: {resume_text[:1000]}
-Job requirements: {job_description[:800]}
-Topics: {topics_str}
-Difficulty: {difficulty}
+        prompt = f"""You are a senior {job_role} interviewer at a top company. You have read this candidate's resume line by line. Now you are sitting across from them in a real interview.
 
-Return ONLY a JSON array with no markdown, no code blocks. Each question must have this structure:
-[{{"question": "the question text", "type": "Technical", "difficulty": "{difficulty}", "why_asked": "why this matters", "sample_answer_points": ["point1", "point2"], "key_topic": "topic", "requires_code": false}}]
+Your job: create exactly {num_questions} questions that a real interviewer would actually ask THIS specific candidate. Not generic questions — questions that come from reading THEIR resume.
 
-Note: Set "requires_code" to true ONLY if the user is expected to write logic, functions, or actual code to answer the question.
+CANDIDATE'S RESUME (read every single line carefully):
+{resume_text[:2000]}
 
-Generate {num_questions} valid questions. Return ONLY the JSON array, nothing else."""
+JOB THEY ARE APPLYING FOR:
+{job_description[:800]}
+
+KEY AREAS TO PROBE: {topics_str}
+DIFFICULTY LEVEL: {difficulty}
+
+Return ONLY a JSON array. Each question object:
+[{{"question": "the question text", "type": "Technical", "difficulty": "{difficulty}", "why_asked": "why this matters for THIS candidate", "sample_answer_points": ["specific point 1", "specific point 2", "specific point 3"], "key_topic": "topic", "requires_code": false, "interview_phase": "warmup", "interviewer_goal": "what signal is being tested", "time_guidance": "60-90 seconds", "resume_anchor": "exact resume line or project that triggered this question"}}]
+
+CRITICAL RULES — follow these exactly:
+1. EVERY question MUST reference something specific from the resume — a project name, a technology, a metric, a company, or a specific claim. NO generic questions allowed.
+2. Question 1 should be a warmup that asks them to walk through their most relevant project from the resume.
+3. At least 2 questions must CHALLENGE specific claims on the resume. If they say "improved performance by 30%" — ask HOW they measured it, what the baseline was, what tradeoffs they made.
+4. At least 1 question must be a realistic production scenario based on the tech stack in their resume (e.g. "Your resume mentions you used Redis and PostgreSQL — walk me through how you'd handle a cache invalidation bug in production").
+5. Questions must sound conversational — like a real person asking in a live interview, NOT like a worksheet or exam.
+6. Include a mix: 1-2 behavioral (STAR format), 2-3 technical depth, 1 scenario/architecture.
+7. Each sample_answer_points must have 3-5 SPECIFIC points that reference the candidate's actual experience.
+8. resume_anchor must quote the EXACT part of the resume that triggered this question.
+9. Avoid textbook definitions. Never ask "What is X?" — instead ask "On your resume you used X in [project]. Walk me through a specific challenge you faced with X and how you solved it."
+10. Questions should build on each other — as if the interviewer is naturally following up."""
 
         try:
             response_text = self._call_with_retry(prompt)
             if response_text is None:
-                logger.warning("⚠️ Question generation API failed after retries")
                 return self._default_questions(num_questions, job_role)
 
             result = self._parse_json_response(response_text)
-            
             if not isinstance(result, list):
-                result = [result]
-            
-            questions = []
-            for q in result[:num_questions]:
-                if isinstance(q, dict) and 'question' in q:
-                    q['type'] = q.get('type', 'General')
-                    q['difficulty'] = q.get('difficulty', difficulty)
-                    q['why_asked'] = q.get('why_asked', 'To assess your experience')
-                    q['sample_answer_points'] = q.get('sample_answer_points', ['Experience', 'Skills'])
-                    q['key_topic'] = q.get('key_topic', 'General')
-                    q['requires_code'] = bool(q.get('requires_code', False))
-                    questions.append(q)
-            
+                result = [result] if result else []
+
+            questions = [self._normalize_question(q, difficulty) for q in result if isinstance(q, dict) and q.get("question")]
             if not questions:
-                logger.warning("⚠️ No valid questions parsed")
                 return self._default_questions(num_questions, job_role)
-            
-            # SAVE TO QUESTIONS CACHE
-            if CACHE_ENABLED:
-                try:
-                    advanced_cache.save_questions(questions=questions, job_role=job_role, 
-                                                  job_description=job_description, difficulty=difficulty)
-                    advanced_cache.record_api_call()
-                    self.cache_stats['api_calls'] += 1
-                    logger.info(f"💾 Questions saved to cache for {job_role}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to cache questions: {e}")
-            
-            logger.info(f"✅ Generated {len(questions)} questions and cached")
-            return questions
+
+            return self._shape_standard_flow(questions, difficulty, num_questions)
         except Exception as e:
-            logger.error(f"❌ Question generation failed: {e}")
+            logger.error(f"Question generation failed: {e}")
             return self._default_questions(num_questions, job_role)
 
     def _default_questions(self, num_questions: int, job_role: str) -> list:
         base_questions = [
-            {"question": f"Tell us about your experience as a {job_role}.", "type": "Behavioral", "difficulty": "Medium", "why_asked": "To understand your background and experience", "sample_answer_points": ["Years of experience", "Key projects", "Technologies used"], "key_topic": "Experience", "requires_code": False},
-            {"question": f"What's your strongest skill related to {job_role}?", "type": "General", "difficulty": "Easy", "why_asked": "To identify your core competencies", "sample_answer_points": ["Specific skill", "How developed it", "Examples"], "key_topic": "Skills", "requires_code": False},
-            {"question": "Write a small function to demonstrate your problem solving.", "type": "Technical", "difficulty": "Medium", "why_asked": "To see your problem-solving approach in code", "sample_answer_points": ["Problem description", "Your approach", "Final solution"], "key_topic": "Problem Solving", "requires_code": True},
-            {"question": "How do you stay updated with latest technologies?", "type": "Behavioral", "difficulty": "Easy", "why_asked": "To assess your learning mindset", "sample_answer_points": ["Learning methods", "Recent learnings", "Certifications"], "key_topic": "Learning", "requires_code": False}
+            {
+                "question": f"Walk me through the project on your resume that best represents you as a {job_role}.",
+                "type": "Behavioral",
+                "difficulty": "Easy",
+                "why_asked": "To validate your background and strongest ownership story.",
+                "sample_answer_points": ["Context", "Ownership", "Impact"],
+                "key_topic": "Experience",
+                "requires_code": False,
+                "interview_phase": "warmup",
+                "interviewer_goal": "Understand strongest project ownership",
+                "time_guidance": "45-60 seconds",
+                "resume_anchor": "strongest project or most relevant experience",
+            },
+            {
+                "question": "On your resume, where did you deal with the hardest technical problem, and how did you debug it or make tradeoffs under pressure?",
+                "type": "Technical",
+                "difficulty": "Medium",
+                "why_asked": "To assess debugging depth and real-world judgment.",
+                "sample_answer_points": ["Problem", "Root cause", "Tradeoff", "Impact"],
+                "key_topic": "Problem Solving",
+                "requires_code": False,
+                "interview_phase": "scenario",
+                "interviewer_goal": "Assess structured debugging and technical ownership",
+                "time_guidance": "90 seconds",
+                "resume_anchor": "most complex production problem on the resume",
+            },
+            {
+                "question": f"Looking at your background, what part of your experience makes you most credible for this {job_role} role right now?",
+                "type": "General",
+                "difficulty": "Medium",
+                "why_asked": "To measure evidence-backed strengths.",
+                "sample_answer_points": ["Strength", "Example", "Result"],
+                "key_topic": "Skills",
+                "requires_code": False,
+                "interview_phase": "core",
+                "interviewer_goal": "Assess credibility and evidence",
+                "time_guidance": "60-90 seconds",
+                "resume_anchor": "role-fit evidence from resume and recent work",
+            },
+            {
+                "question": "Tell me about a time from your past work where you had to align teammates or stakeholders under pressure. What changed because of your actions?",
+                "type": "Behavioral",
+                "difficulty": "Medium",
+                "why_asked": "To assess communication and accountability.",
+                "sample_answer_points": ["Situation", "Action", "Communication", "Outcome"],
+                "key_topic": "Collaboration",
+                "requires_code": False,
+                "interview_phase": "behavioral",
+                "interviewer_goal": "Assess leadership and stakeholder management",
+                "time_guidance": "60-90 seconds",
+                "resume_anchor": "cross-team ownership or collaboration example",
+            },
         ]
         return base_questions[:num_questions]
 
     def evaluate_answer_with_feedback(self, question: str, answer: str, question_type: str, sample_points: list) -> dict:
-        prompt = f"""Evaluate this interview answer. Return ONLY valid JSON.
+        prompt = f"""You are a sharp but supportive interviewer evaluating a live interview answer.
+Return ONLY valid JSON.
 
 QUESTION: {question}
+QUESTION TYPE: {question_type}
 ANSWER: {answer}
 EXPECTED: {", ".join(sample_points) if isinstance(sample_points, list) else "Good examples"}
 
-Return this exact JSON (no markdown):
-{{"score": 7, "feedback": "Good answer", "strengths": ["strength1"], "improvements": ["improvement1"], "missing_points": ["missing1"], "how_to_improve": "how to improve", "example_improvement": "better answer", "confidence_indicator": "Good", "real_interview_tip": "real tip", "follow_up_topic": "topic"}}
+Return this exact JSON:
+{{"score": 7, "feedback": "Good answer", "strengths": ["strength1"], "improvements": ["improvement1"], "missing_points": ["missing1"], "how_to_improve": "how to improve", "example_improvement": "better answer", "confidence_indicator": "Good", "real_interview_tip": "real tip", "follow_up_topic": "topic", "score_breakdown": {{"clarity": 7, "depth": 6, "relevance": 8, "evidence": 5}}}}
 
-Score must be 1-10."""
+Rules:
+- reward specificity, ownership, tradeoff awareness, and examples
+- penalize generic answers with no evidence
+- feedback should sound like a real interviewer"""
 
         try:
             response_text = self._call_with_retry(prompt)
@@ -366,47 +365,60 @@ Score must be 1-10."""
                 return self._default_evaluation()
 
             result = self._parse_json_response(response_text)
-            
-            result['score'] = max(1, min(10, int(result.get('score', 5))))
-            for field in ['strengths', 'improvements', 'missing_points']:
+            if result is None:
+                return self._default_evaluation()
+
+            result["score"] = max(1, min(10, int(result.get("score", 5))))
+            for field in ["strengths", "improvements", "missing_points"]:
                 if not isinstance(result.get(field), list):
-                    result[field] = [result.get(field, 'Good')]
-            
-            result['feedback'] = str(result.get('feedback', 'Good attempt'))
-            result['how_to_improve'] = str(result.get('how_to_improve', 'Add more details'))
-            result['real_interview_tip'] = str(result.get('real_interview_tip', 'Be specific'))
-            result['follow_up_topic'] = str(result.get('follow_up_topic', 'General'))
-            
-            logger.info(f"✅ Answer evaluated: score={result['score']}")
+                    result[field] = [str(result.get(field, "Good"))]
+            result["feedback"] = str(result.get("feedback", "Good attempt"))
+            result["how_to_improve"] = str(result.get("how_to_improve", "Add more detail and stronger evidence."))
+            result["example_improvement"] = str(result.get("example_improvement", "Mention the action you took and the measurable result."))
+            result["confidence_indicator"] = str(result.get("confidence_indicator", "Average"))
+            result["real_interview_tip"] = str(result.get("real_interview_tip", "Back up claims with specifics."))
+            result["follow_up_topic"] = str(result.get("follow_up_topic", "General"))
+            if not isinstance(result.get("score_breakdown"), dict):
+                result["score_breakdown"] = {
+                    "clarity": result["score"],
+                    "depth": max(1, result["score"] - 1),
+                    "relevance": result["score"],
+                    "evidence": max(1, result["score"] - 1),
+                }
             return result
         except Exception as e:
-            logger.error(f"❌ Evaluation failed: {e}")
+            logger.error(f"Evaluation failed: {e}")
             return self._default_evaluation()
 
     def _default_evaluation(self) -> dict:
         return {
-            "score": 6, "feedback": "Good attempt with room for improvement",
-            "strengths": ["Clear communication"], "improvements": ["Add more specific examples"],
-            "missing_points": ["Quantifiable metrics"], "how_to_improve": "Include specific numbers and metrics in your examples",
-            "example_improvement": "Instead of 'improved performance', say 'reduced latency by 40%'",
-            "confidence_indicator": "Average", "real_interview_tip": "Always back up claims with measurable results",
-            "follow_up_topic": "Technical depth"
+            "score": 6,
+            "feedback": "Good attempt with room for improvement.",
+            "strengths": ["Clear communication"],
+            "improvements": ["Add more specific examples"],
+            "missing_points": ["Quantifiable metrics"],
+            "how_to_improve": "Include concrete decisions, actions, and measurable impact.",
+            "example_improvement": "Instead of saying you improved performance, say what changed and by how much.",
+            "confidence_indicator": "Average",
+            "real_interview_tip": "Strong interview answers usually show context, action, and outcome.",
+            "follow_up_topic": "Technical depth",
+            "score_breakdown": {"clarity": 6, "depth": 5, "relevance": 6, "evidence": 4},
         }
 
     def generate_learning_report(self, answers: list, resume_analysis: dict, job_role: str) -> dict:
-        answers_summary = "\n".join([f"Q: {a['question']}\nScore: {a['evaluation'].get('score', 5)}/10" for a in answers[:3]])
+        answers_summary = "\n".join([f"Q: {a['question']}\nScore: {a['evaluation'].get('score', 5)}/10" for a in answers[:4]])
 
-        prompt = f"""Generate learning report. Return ONLY valid JSON with no markdown.
+        prompt = f"""Generate a practical interview learning report. Return ONLY valid JSON.
 
 Job: {job_role}
 Compatibility: {resume_analysis.get('compatibility_score', 50)}%
 Level: {resume_analysis.get('experience_level', 'Mid')}
 Scores: {answers_summary}
 
-Return this exact JSON:
+Return this JSON:
 {{"overall_assessment": "assessment", "recommendation": "Good Fit", "confidence_level": 7, "strengths_demonstrated": ["s1"], "areas_for_improvement": ["a1"], "preparation_plan": {{"immediate_focus": "focus", "daily_practice": ["p1"], "resources": ["r1"]}}, "interview_tips": ["t1"], "next_steps": ["n1"], "technical_topics_to_study": ["t1"], "behavioral_patterns_to_develop": ["b1"], "estimated_readiness": "2 weeks prep", "motivational_message": "You got this!"}}
 
-confidence_level must be 1-10."""
+Make it specific and actionable."""
 
         try:
             response_text = self._call_with_retry(prompt)
@@ -414,48 +426,63 @@ confidence_level must be 1-10."""
                 return self._default_learning_report()
 
             result = self._parse_json_response(response_text)
-            
-            result['confidence_level'] = max(1, min(10, int(result.get('confidence_level', 5))))
-            for field in ['strengths_demonstrated', 'areas_for_improvement', 'interview_tips', 'next_steps', 'technical_topics_to_study', 'behavioral_patterns_to_develop']:
+            if result is None:
+                return self._default_learning_report()
+
+            result["confidence_level"] = max(1, min(10, int(result.get("confidence_level", 5))))
+            for field in [
+                "strengths_demonstrated",
+                "areas_for_improvement",
+                "interview_tips",
+                "next_steps",
+                "technical_topics_to_study",
+                "behavioral_patterns_to_develop",
+            ]:
                 if not isinstance(result.get(field), list):
-                    result[field] = [str(result.get(field, 'Item'))]
-            
-            if isinstance(result.get('preparation_plan'), dict):
-                if not isinstance(result['preparation_plan'].get('daily_practice'), list):
-                    result['preparation_plan']['daily_practice'] = ['Practice daily']
-                if not isinstance(result['preparation_plan'].get('resources'), list):
-                    result['preparation_plan']['resources'] = ['Study resources']
-            
-            logger.info("✅ Learning report generated")
+                    result[field] = [str(result.get(field, "Item"))]
+
+            if not isinstance(result.get("preparation_plan"), dict):
+                result["preparation_plan"] = {}
+            if not isinstance(result["preparation_plan"].get("daily_practice"), list):
+                result["preparation_plan"]["daily_practice"] = ["Practice one structured answer daily"]
+            if not isinstance(result["preparation_plan"].get("resources"), list):
+                result["preparation_plan"]["resources"] = ["Mock interviews", "Interview notes"]
+
             return result
         except Exception as e:
-            logger.error(f"❌ Report generation failed: {e}")
+            logger.error(f"Learning report generation failed: {e}")
             return self._default_learning_report()
 
     def _default_learning_report(self) -> dict:
         return {
-            "overall_assessment": "Good performance overall", "recommendation": "Good Fit",
-            "confidence_level": 7, "strengths_demonstrated": ["Communication", "Problem-solving"],
-            "areas_for_improvement": ["Technical depth", "System design"],
-            "preparation_plan": {"immediate_focus": "Practice coding problems", "daily_practice": ["DSA problems - 30 min", "System design - 30 min"], "resources": ["LeetCode", "System Design Primer"]},
-            "interview_tips": ["Think aloud during problem solving", "Ask clarifying questions first", "Use STAR method for behavioral"],
-            "next_steps": ["Practice daily", "Review weak areas", "Mock interviews"],
+            "overall_assessment": "Good performance overall with clear room to grow.",
+            "recommendation": "Good Fit",
+            "confidence_level": 7,
+            "strengths_demonstrated": ["Communication", "Problem-solving"],
+            "areas_for_improvement": ["Technical depth", "Specificity"],
+            "preparation_plan": {
+                "immediate_focus": "Practice stronger evidence-backed answers",
+                "daily_practice": ["One technical scenario", "One STAR answer"],
+                "resources": ["LeetCode", "System Design Primer"],
+            },
+            "interview_tips": ["Think aloud during problem solving", "Ask clarifying questions first", "Use STAR for behavioral questions"],
+            "next_steps": ["Practice daily", "Review weak areas", "Do another mock interview"],
             "technical_topics_to_study": ["Data Structures", "Algorithms"],
-            "behavioral_patterns_to_develop": ["STAR method", "Confidence"],
+            "behavioral_patterns_to_develop": ["STAR method", "Concise storytelling"],
             "estimated_readiness": "Ready in 2 weeks",
-            "motivational_message": "You're on the right track! Keep practicing."
+            "motivational_message": "You are closer than you think. Sharpen the weak areas and go again.",
         }
 
     def generate_final_report(self, answers: list, score: int, analysis: dict) -> dict:
-        prompt = f"""Generate final interview report. Return ONLY valid JSON with no markdown.
+        prompt = f"""Generate a realistic final interview summary. Return ONLY valid JSON.
 
 Score: {score}%
 Experience: {analysis.get('experience_level', 'Mid')}
 
-Return this exact JSON:
+Return this JSON:
 {{"recommendation": "Good Fit", "overall_summary": "summary", "interview_readiness": 7, "confidence_boost": "motivational", "key_learnings": ["l1"], "next_big_step": "next step", "estimated_interview_success_rate": "75%"}}
 
-interview_readiness must be 1-10."""
+Use recommendation values like Strong Hire, Good Fit, Borderline, or Needs Work."""
 
         try:
             response_text = self._call_with_retry(prompt)
@@ -463,259 +490,274 @@ interview_readiness must be 1-10."""
                 return self._default_final_report()
 
             result = self._parse_json_response(response_text)
-            
-            result['interview_readiness'] = max(1, min(10, int(result.get('interview_readiness', 5))))
-            if not isinstance(result.get('key_learnings'), list):
-                result['key_learnings'] = ['Learning 1', 'Learning 2']
-            
-            logger.info("✅ Final report generated")
+            if result is None:
+                return self._default_final_report()
+
+            result["interview_readiness"] = max(1, min(10, int(result.get("interview_readiness", 5))))
+            if not isinstance(result.get("key_learnings"), list):
+                result["key_learnings"] = ["Communication", "Specificity"]
             return result
         except Exception as e:
-            logger.error(f"❌ Final report failed: {e}")
+            logger.error(f"Final report generation failed: {e}")
             return self._default_final_report()
 
     def _default_final_report(self) -> dict:
         return {
-            "recommendation": "Good Fit", "overall_summary": "Solid performance in interview",
-            "interview_readiness": 7, "confidence_boost": "You're ready for real interviews with a bit more practice",
-            "key_learnings": ["Technical communication", "Practical examples", "Problem-solving"],
-            "next_big_step": "Apply to real positions with confidence",
-            "estimated_interview_success_rate": "75%"
+            "recommendation": "Good Fit",
+            "overall_summary": "Solid performance with a few areas that need more depth and sharper evidence.",
+            "interview_readiness": 7,
+            "confidence_boost": "You are close. A little more focused practice will make your answers feel much stronger.",
+            "key_learnings": ["Technical communication", "Practical examples", "Structured storytelling"],
+            "next_big_step": "Run another realistic mock interview and improve your weakest answer type.",
+            "estimated_interview_success_rate": "75%",
         }
-    
+
     def get_cache_stats(self) -> dict:
-        """Get cache statistics for monitoring"""
         if CACHE_ENABLED:
             try:
                 advanced_stats = advanced_cache.stats_summary()
-                return {'llm_service_stats': self.cache_stats, 'advanced_cache_stats': advanced_stats, 'cache_enabled': True, 'efficiency_summary': advanced_cache.get_cache_status()}
+                return {
+                    "llm_service_stats": self.cache_stats,
+                    "advanced_cache_stats": advanced_stats,
+                    "cache_enabled": True,
+                    "efficiency_summary": advanced_cache.get_cache_status(),
+                }
             except Exception as e:
-                logger.warning(f"Failed to get cache stats: {e}")
-                return {'cache_enabled': True, 'error': str(e)}
-        else:
-            return {'cache_enabled': False, 'message': 'Cache system not available'}
+                return {"cache_enabled": True, "error": str(e)}
+        return {"cache_enabled": False, "message": "Cache system not available"}
 
     def evaluate_interview_batch(self, answers: list, job_role: str) -> dict:
-        """
-        Evaluate ALL answers at once for Rapid Fire Mode.
-        Returns a structured report with scores for each answer and an overall summary.
-        """
-        logger.info(f"🔥 Batch evaluating {len(answers)} answers for {job_role}...")
-        
-        # Prepare the transcript for the LLM
+        logger.info(f"Batch evaluating {len(answers)} answers for {job_role}...")
+
         transcript = ""
         for i, a in enumerate(answers):
-            q_text = a.get('question', 'Unknown Question')
-            ans_text = a.get('answer', 'No Answer')
-            transcript += f"Q{i+1}: {q_text}\nAnswer: {ans_text}\n\n"
-            
-        prompt = f"""You are an expert interviewer for the role of {job_role}. 
-        Evaluate this Rapid Fire interview session. The candidate had limited time (60s) per question.
+            q_text = a.get("question", "Unknown Question")
+            ans_text = a.get("answer", "No Answer")
+            transcript += f"Q{i + 1}: {q_text}\nAnswer: {ans_text}\n\n"
 
-        TRANSCRIPT:
-        {transcript}
+        prompt = f"""You are an expert interviewer for the role of {job_role}.
+Evaluate this Rapid Fire interview session. The candidate had limited time per question.
 
-        Task:
-        1. Score each answer (1-10).
-        2. Provide short, punchy feedback for each answer.
-        3. Calculate overall rating.
+TRANSCRIPT:
+{transcript}
 
-        Return ONLY a JSON object with this exact structure:
-        {{
-            "question_evaluations": [
-                {{
-                    "question_index": 1,
-                    "score": 8,
-                    "feedback": "Good point on X, but missed Y.",
-                    "key_missing": "Mention Z"
-                }}
-            ],
-            "overall_report": {{
-                "total_score": 75,
-                "average_score": 7.5,
-                "rating": "HIRE/CONSIDER/TRAIN",
-                "summary": "Strong technical skills but weak on system design.",
-                "strengths": ["Python", "SQL"],
-                "improvements": ["Optimization"]
-            }}
-        }}
-        """
+Return ONLY a JSON object:
+{{
+  "question_evaluations": [
+    {{
+      "question_index": 1,
+      "score": 8,
+      "feedback": "Good point on X, but missed Y.",
+      "key_missing": "Mention Z",
+      "strong_signal": "what worked well",
+      "next_step": "what to improve next time"
+    }}
+  ],
+  "overall_report": {{
+    "total_score": 75,
+    "average_score": 7.5,
+    "rating": "HIRE/CONSIDER/TRAIN",
+    "summary": "Strong technical skills but weak on system design.",
+    "strengths": ["Python", "SQL"],
+    "improvements": ["Optimization"],
+    "focus_areas": ["System design", "Specificity"],
+    "recommended_next_round": "Do another rapid fire focused on debugging and tradeoffs."
+  }}
+}}"""
 
         try:
-            from groq_service import GroqJobService
-            groq = GroqJobService()
-            if not groq.client:
-                raise Exception("Groq client not available")
-                
-            logger.info("🚀 Routing Batch Evaluation to Groq Llama 3.3 for maximum speed...")
-            result = groq.evaluate_batch(prompt)
-            
-            if "raw" in result:
-                logger.error("❌ Groq returned raw text instead of JSON")
+            response_text = self._call_with_retry(prompt)
+            if response_text is None:
                 return self._default_batch_evaluation(len(answers))
 
-            logger.info("✅ Groq Batch evaluation complete")
+            result = self._parse_json_response(response_text)
+            if result is None:
+                return self._default_batch_evaluation(len(answers))
+
+            # Normalize the result structure
+            if "question_evaluations" not in result or "overall_report" not in result:
+                return self._default_batch_evaluation(len(answers))
+
             return result
-            
         except Exception as e:
-            logger.error(f"❌ Groq Batch evaluation failed: {e}")
+            logger.error(f"Batch evaluation failed: {e}")
             return self._default_batch_evaluation(len(answers))
 
     def _default_batch_evaluation(self, count: int) -> dict:
         return {
-            "question_evaluations": [{"question_index": i+1, "score": 5, "feedback": "Processed (Fallback)", "key_missing": "N/A"} for i in range(count)],
+            "question_evaluations": [
+                {
+                    "question_index": i + 1,
+                    "score": 5,
+                    "feedback": "Processed (Fallback)",
+                    "key_missing": "N/A",
+                    "strong_signal": "Kept moving",
+                    "next_step": "Add more specifics",
+                }
+                for i in range(count)
+            ],
             "overall_report": {
-                "total_score": 5 * count, "average_score": 5.0, "rating": "CONSIDER",
+                "total_score": 5 * count,
+                "average_score": 5.0,
+                "rating": "CONSIDER",
                 "summary": "Evaluation data unavailable due to service error.",
-                "strengths": ["Participation"], "improvements": ["Retry later"]
-            }
+                "strengths": ["Participation"],
+                "improvements": ["Retry later"],
+                "focus_areas": ["Specificity"],
+                "recommended_next_round": "Retry the session once the evaluator is available.",
+            },
         }
 
     def generate_batch_questions(self, job_role: str, num_questions: int = 50, difficulty: str = "Medium") -> list:
-        """
-        Generate a LARGE batch of questions for offline database (Rapid Fire Mode).
-        Does NOT use cache to ensure freshness when regenerating DB.
-        """
-        logger.info(f"🔥 Generating BATCH questions for {job_role} (Target: {num_questions})...")
-        
-        # We ask for slightly more than needed because some might be malformed
         prompt = f"""Generate a comprehensive interview question bank for the role: {job_role}.
-        Target Audience: {difficulty} level candidates.
-        
-        Generate exactly {num_questions} unique technical and behavioral questions.
-        
-        Requirements:
-        1. FOCUS on Real-world Production Scenarios, Debugging, and System Design.
-        2. Questions must be 'Job Ready' - the kind asked in Senior/Principal level interviews.
-        3. AVOID simple definitions (e.g. "What is X?"). ASK "How would you handle X in production?"
-        4. difficulty should be '{difficulty}'.
-        5. 'keywords' must be a list of 3-5 crucial words/phrases expected in the answer.
-        
-        Return ONLY a JSON array with this structure:
-        [
-            {{
-                "question": "Question text here",
-                "type": "Technical",  # or "Behavioral"
-                "difficulty": "{difficulty}",
-                "keywords": ["keyword1", "keyword2", "keyword3"]
-            }}
-        ]
-        """
+Target Audience: {difficulty} level candidates.
+
+Generate exactly {num_questions} unique technical and behavioral questions.
+
+Requirements:
+1. Focus on real-world production scenarios, debugging, and system design.
+2. Questions must be job-ready, not trivia.
+3. difficulty should be '{difficulty}'.
+4. keywords must be a list of 3-5 crucial words/phrases expected in the answer.
+
+Return ONLY a JSON array:
+[
+  {{
+    "question": "Question text here",
+    "type": "Technical",
+    "difficulty": "{difficulty}",
+    "keywords": ["keyword1", "keyword2", "keyword3"]
+  }}
+]"""
 
         try:
-            # For large batches, we might need a model with larger output context or just hope for the best
-            # Breaking it down might be better, but let's try one shot first for simplicity
             response_text = self._call_with_retry(prompt)
             if response_text is None:
-                logger.error("❌ Batch generation API failed")
                 return []
 
             result = self._parse_json_response(response_text)
-                
             if not isinstance(result, list):
-                if isinstance(result, dict) and 'questions' in result:
-                    result = result['questions']
+                if isinstance(result, dict) and "questions" in result:
+                    result = result["questions"]
                 else:
-                    result = [result]
-            
-            # Validate and Clean
+                    result = [result] if result else []
+
             valid_questions = []
             for q in result:
-                if isinstance(q, dict) and 'question' in q:
+                if isinstance(q, dict) and q.get("question"):
                     valid_questions.append({
-                        "question": q['question'],
-                        "type": q.get('type', 'Technical'),
-                        "difficulty": q.get('difficulty', difficulty),
-                        "keywords": q.get('keywords', ["relevant answer"])
+                        "question": q["question"],
+                        "type": q.get("type", "Technical"),
+                        "difficulty": q.get("difficulty", difficulty),
+                        "keywords": q.get("keywords", ["relevant answer"]),
                     })
-            
-            logger.info(f"✅ Batch generated {len(valid_questions)} questions for {job_role}")
             return valid_questions
-            
         except Exception as e:
-            logger.error(f"❌ Batch generation failed for {job_role}: {e}")
+            logger.error(f"Batch generation failed for {job_role}: {e}")
+            return []
+
     def analyze_resume(self, resume_text: str) -> dict:
         """
-        3-in-One Analysis: Score + ATS Check + Magic Rewrite.
-        Uses dedicated Resume API Key if available to save Interview quota.
+        Resume Scorer: ATS score + missing keywords + magic bullet rewrites.
+        Uses the dedicated resume API key if available.
         """
-        # Dual Key Logic: Switch context if specific key exists
-        if self.resume_api_key:
-            logger.info("🔑 Switching to GEMINI_RESUME_API_KEY for analysis")
-            genai.configure(api_key=self.resume_api_key)
-        
-        prompt = f"""You are an expert ATS (Applicant Tracking System) and Resume Coach. Analyze this resume text.
+        prompt = f"""You are an expert ATS resume coach at a top career consulting firm. A candidate has uploaded their resume for scoring.
 
-RESUME TEXT:
+Your job: analyze the resume for ATS compatibility, identify missing keywords, find formatting issues, and rewrite the weakest bullet points to be much stronger.
+
+RESUME TEXT (analyze every line carefully):
 {resume_text[:3000]}
 
-Task:
-1. **Score**: Calculate a match score (0-100) based on general employability and clarity.
-2. **ATS Check**: Identify critical missing keywords (e.g., Python, SQL, AWS, Leadership) and formatting issues.
-3. **Magic Rewrite**: Identify the 2 weakest bullet points. Rewrite them to be high-impact, using the "Action + Result + Metric" formula (e.g., "Increased sales by 20%...").
-
-Return ONLY a generic JSON object with this exact structure:
+You MUST return ONLY valid JSON in this EXACT structure — no markdown, no explanation, just the JSON object:
 {{
-  "score": 75,
-  "summary": "Strong technical background but lacks leadership keywords.",
+  "score": 72,
+  "summary": "One paragraph assessment of the resume's overall quality, strengths, and biggest weaknesses. Be specific about what's good and what needs work.",
   "ats_feedback": {{
-      "missing_keywords": ["Leadership", "Agile"],
-      "formatting_issues": ["Use standard section headers"]
+    "missing_keywords": ["keyword1", "keyword2", "keyword3"],
+    "formatting_issues": ["issue1", "issue2"]
   }},
   "magic_rewrites": [
-      {{
-          "original": "Worked on python api",
-          "rewritten": "Developed high-performance REST APIs using Python/FastAPI, reducing latency by 30%.",
-          "explanation": "Added tech stack detail and quantifiable metric."
-      }}
+    {{
+      "original": "exact weak bullet point copied from the resume",
+      "rewritten": "the same point rewritten with action verbs, metrics, and impact",
+      "explanation": "what was improved and why it's stronger"
+    }},
+    {{
+      "original": "another weak bullet",
+      "rewritten": "stronger version",
+      "explanation": "improvement rationale"
+    }}
   ]
-}}"""
+}}
+
+CRITICAL RULES:
+1. score must be an integer 0-100. Be honest — most resumes score 50-80.
+2. summary must be a specific, personalized paragraph (not generic boilerplate).
+3. missing_keywords: list 3-8 industry-relevant keywords that are MISSING from this resume but should be there.
+4. formatting_issues: list 1-4 concrete formatting problems (e.g. "No quantifiable metrics in experience section", "Missing skills section").
+5. magic_rewrites: find 2-4 of the WEAKEST bullet points from the actual resume text and rewrite them. The "original" field must be text that actually appears in the resume.
+6. Each rewrite must add: action verb, specific metrics/numbers, and clear impact.
+7. Do NOT wrap the JSON in markdown code blocks. Return raw JSON only."""
 
         try:
             response_text = self._call_with_retry(prompt, use_resume_key=True)
             if response_text is None:
-                logger.error("❌ Resume analysis API failed after retries")
+                logger.error("Resume analysis: _call_with_retry returned None")
                 return self._default_resume_analysis()
 
             result = self._parse_json_response(response_text)
-            
             if result is None:
-                logger.error("❌ Resume analysis JSON bad format")
+                logger.error("Resume analysis: JSON parse returned None")
                 return self._default_resume_analysis()
-                
+
+            # Validate and ensure all required fields exist with correct types
+            result["score"] = int(result.get("score", 0))
+            result["summary"] = str(result.get("summary", "Analysis completed."))
+
+            ats = result.get("ats_feedback")
+            if not isinstance(ats, dict):
+                ats = {}
+            result["ats_feedback"] = {
+                "missing_keywords": ats.get("missing_keywords", []) if isinstance(ats.get("missing_keywords"), list) else [],
+                "formatting_issues": ats.get("formatting_issues", []) if isinstance(ats.get("formatting_issues"), list) else [],
+            }
+
+            rewrites = result.get("magic_rewrites")
+            if not isinstance(rewrites, list):
+                rewrites = []
+            result["magic_rewrites"] = [
+                r for r in rewrites
+                if isinstance(r, dict) and r.get("original") and r.get("rewritten")
+            ]
+
             return result
-            
         except Exception as e:
-            logger.error(f"❌ Resume Analysis Failed: {e}")
+            logger.error(f"Resume analysis failed: {e}")
             return self._default_resume_analysis()
 
     def _default_resume_analysis(self):
         return {
             "score": 0,
-            "summary": "Analysis failed. Please try again.",
+            "summary": "Analysis could not be completed. Please check your API key and try again.",
             "ats_feedback": {"missing_keywords": [], "formatting_issues": []},
-            "magic_rewrites": []
+            "magic_rewrites": [],
         }
 
     def enhance_resume_bullet(self, bullet: str, job_role: str = "", job_description: str = "") -> dict:
-        """
-        AI-enhance a single resume bullet point.
-        Returns impactful rewrite with action verbs, metrics, and STAR method.
-        """
         role_context = f" for a {job_role} position" if job_role else ""
-        jd_context = f"\n\nTARGET JOB DESCRIPTION (Align the bullet to match keywords and requirements here if applicable):\n{job_description}" if job_description else ""
-        
+        jd_context = f"\n\nTARGET JOB DESCRIPTION:\n{job_description}" if job_description else ""
+
         prompt = f"""You are an expert resume writer. Rewrite this bullet point to be more impactful{role_context}.{jd_context}
 
 ORIGINAL BULLET POINT:
 "{bullet}"
 
 Rules:
-1. Start with a strong ACTION VERB (Led, Developed, Optimized, Architected, etc.)
-2. Add QUANTIFIABLE METRICS where possible (%, $, time saved, users impacted)
-3. Use the RESULT-ORIENTED format: "Action + Context + Impact"
-4. Keep it concise (1-2 lines max)
-5. Make it ATS-friendly with relevant keywords
+1. Start with a strong action verb
+2. Add quantifiable metrics where possible
+3. Use the format: Action + Context + Impact
+4. Keep it concise
+5. Make it ATS-friendly
 
 Return ONLY valid JSON:
 {{"enhanced": "the rewritten bullet point", "tip": "one short tip explaining what was improved"}}"""
@@ -726,12 +768,9 @@ Return ONLY valid JSON:
                 return {"enhanced": bullet, "tip": "Enhancement service busy. Try again later."}
 
             result = self._parse_json_response(response_text)
-            
-            if result and 'enhanced' in result:
-                logger.info("✅ Bullet point enhanced")
+            if result and "enhanced" in result:
                 return result
-            
             return {"enhanced": bullet, "tip": "Could not enhance. Try rephrasing."}
         except Exception as e:
-            logger.error(f"❌ Bullet enhance failed: {e}")
+            logger.error(f"Bullet enhance failed: {e}")
             return {"enhanced": bullet, "tip": "Enhancement service unavailable."}

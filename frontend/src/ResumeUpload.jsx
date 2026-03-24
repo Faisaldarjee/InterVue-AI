@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader, ArrowRight, Sparkles } from 'lucide-react';
-import apiClient from './utils/apiClient';
+import { Upload, FileText, AlertCircle, Loader, ArrowRight, Sparkles } from 'lucide-react';
+import { analyzeResumeFile } from './utils/apiClient';
 
 export default function ResumeUpload({ onAnalysisComplete }) {
     const [dragActive, setDragActive] = useState(false);
@@ -59,15 +59,13 @@ export default function ResumeUpload({ onAnalysisComplete }) {
         formData.append('file', file);
 
         try {
-            const response = await apiClient.post('/analyze-resume', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            if (response.data.status === 'success') {
-                onAnalysisComplete(response.data.analysis);
+            const response = await analyzeResumeFile(formData);
+            if (response.status === 'success') {
+                onAnalysisComplete(response.analysis);
             }
         } catch (err) {
             console.error("Analysis Failed", err);
-            setError("Failed to analyze resume. Please try again.");
+            setError(err.response?.data?.detail || "Failed to analyze resume. Please try again.");
         } finally {
             setLoading(false);
         }

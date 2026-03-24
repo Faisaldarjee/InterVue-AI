@@ -9,7 +9,7 @@ export default function ResumeReport({ analysis, onReset }) {
 
     if (!analysis) return null;
 
-    const { score, summary, ats_feedback, magic_rewrites } = analysis;
+    const { score = 0, summary = '', ats_feedback = {}, magic_rewrites = [] } = analysis;
 
     const scoreColor = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
     const scoreLabel = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Work';
@@ -200,7 +200,7 @@ export default function ResumeReport({ analysis, onReset }) {
                     </div>
 
                     <div className="space-y-4">
-                        {magic_rewrites.map((item, idx) => (
+                        {magic_rewrites.length > 0 ? magic_rewrites.map((item, idx) => (
                             <motion.div
                                 key={idx}
                                 initial={{ opacity: 0, y: 15 }}
@@ -239,7 +239,11 @@ export default function ResumeReport({ analysis, onReset }) {
                                     </div>
                                 </div>
                             </motion.div>
-                        ))}
+                        )) : (
+                            <div className="bg-slate-900/60 backdrop-blur border border-slate-800/50 rounded-2xl p-6 text-slate-400 text-sm">
+                                No rewrite suggestions yet. Try uploading a more detailed resume for stronger recommendations.
+                            </div>
+                        )}
                     </div>
                 </motion.div>
 

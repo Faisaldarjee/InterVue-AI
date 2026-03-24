@@ -1,4 +1,6 @@
 // ==================== INTERVIEW HISTORY UTILS (Per-User) ====================
+import { getModeStatsKey, normalizeHistoryItem, normalizeMode } from './interviewData';
+
 const BASE_KEY = 'intervue_ai_history';
 
 // Current user ID — set this after login
@@ -15,7 +17,7 @@ function getKey() {
 export function getHistory() {
     try {
         const data = localStorage.getItem(getKey());
-        return data ? JSON.parse(data) : [];
+        return data ? JSON.parse(data).map(normalizeHistoryItem) : [];
     } catch {
         return [];
     }
@@ -27,7 +29,7 @@ export function saveInterview(record) {
         const entry = {
             id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
             timestamp: new Date().toISOString(),
-            ...record,
+            ...normalizeHistoryItem(record),
         };
         history.unshift(entry); // newest first
 
@@ -70,15 +72,14 @@ export function getStats() {
     const recentScores = history.slice(0, 10).reverse().map(h => ({
         date: new Date(h.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
         score: h.score || 0,
-        mode: h.mode || 'standard',
+        mode: normalizeMode(h.mode),
     }));
 
     // Mode breakdown
     const modeBreakdown = { standard: 0, rapidFire: 0, voice: 0 };
     history.forEach(h => {
-        if (h.mode === 'rapid-fire') modeBreakdown.rapidFire++;
-        else if (h.mode === 'voice') modeBreakdown.voice++;
-        else modeBreakdown.standard++;
+        const key = getModeStatsKey(h.mode);
+        modeBreakdown[key] = (modeBreakdown[key] || 0) + 1;
     });
 
     // Role breakdown (top 5)

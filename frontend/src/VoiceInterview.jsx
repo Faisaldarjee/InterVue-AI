@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Square, ArrowRight, Volume2, CheckCircle, AlertCircle, Loader, X, RefreshCw, AudioLines } from 'lucide-react';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { Mic, Square, ArrowRight, Volume2, AlertCircle, Loader, X, RefreshCw } from 'lucide-react';
+import { submitVoiceInterviewBatch } from './utils/apiClient';
 
 // ==================== IMPROVED AUDIO VISUALIZER ====================
 const AudioVisualizer = ({ isListening }) => {
@@ -238,14 +236,14 @@ export default function VoiceInterview({ initialData, onBack, onComplete }) {
         setProcessing(true);
         try {
             await new Promise(r => setTimeout(r, 1500));
-            const response = await axios.post(`${API_URL}/submit-voice-batch`, {
+            const response = await submitVoiceInterviewBatch({
                 session_id: initialData.interviewId,
                 job_role: initialData.jobRole,
                 answers: finalAnswers
             });
-            if (onComplete) onComplete(response.data);
+            if (onComplete) onComplete(response);
         } catch (err) {
-            setError('Failed to submit. ' + err.message);
+            setError(err.response?.data?.detail || ('Failed to submit. ' + err.message));
         } finally {
             setProcessing(false);
         }

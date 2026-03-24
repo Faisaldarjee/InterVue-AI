@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    Send, Loader, AlertCircle, ArrowRight, Mic, MicOff,
-    Code, Clock, Video, VideoOff, ChevronRight, Check,
-    X, Volume2, Sparkles, Timer, User, Brain, MessageSquare
+    Send, Loader, AlertCircle, Mic, MicOff,
+    Code, Clock, Video, VideoOff, Check,
+    X, Sparkles, Timer, Brain, MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
 import Editor from 'react-simple-code-editor';
 import Prism from 'prismjs';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { submitStandardInterviewBatch } from './utils/apiClient';
 
 // ==================== INTERVIEW ROOM ====================
 export default function InterviewRoom({
-    sessionId, firstQuestion, totalQuestions, jobRole,
+    sessionId, firstQuestion, questions = [], totalQuestions, jobRole,
     interviewTips, onAnswer, onBack
 }) {
     // Core State
@@ -21,7 +19,7 @@ export default function InterviewRoom({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [currentQuestion, setCurrentQuestion] = useState(firstQuestion);
+    const [currentQuestion, setCurrentQuestion] = useState(firstQuestion || questions?.[0] || null);
     const [answersData, setAnswersData] = useState([]);
     const [progress, setProgress] = useState({ current: 1, total: totalQuestions });
     const [showTips, setShowTips] = useState(true);
@@ -152,31 +150,43 @@ export default function InterviewRoom({
         setAiState('thinking');
 
         try {
-            const response = await axios.post(
-                `${API_URL}/submit-answer/${sessionId}`,
-                { answer: answer.trim() },
-                { timeout: 60000 }
-            );
+            const nextAnswers = [
+                ...answersData,
+                {
+                    question: currentQuestion?.question,
+                    answer: answer.trim(),
+                    questionDetails: currentQuestion,
+                },
+            ];
 
-            if (response.data.status === 'completed') {
+            if (currentQuestionIndex + 1 >= totalQuestions) {
+                const response = await submitStandardInterviewBatch({
+                    session_id: sessionId,
+                    answers: nextAnswers.map((item) => ({
+                        question: item.question,
+                        answer: item.answer,
+                    })),
+                });
+
                 setAiState('speaking');
                 setShowComplete(true);
                 setTimeout(() => {
                     onAnswer({
                         isComplete: true,
-                        finalReport: response.data.final_report,
-                        learningReport: response.data.learning_report,
-                        summary: response.data.interview_summary,
-                        answers: [...answersData, { question: currentQuestion.question, evaluation: response.data.evaluation }]
+                        finalReport: response.final_report,
+                        learningReport: response.learning_report,
+                        summary: response.interview_summary,
+                        answers: response.evaluations || nextAnswers,
                     });
                 }, 3000);
             } else {
                 setAiState('speaking');
-                setAnswersData(prev => [...prev, { question: currentQuestion.question, evaluation: response.data.evaluation }]);
+                setAnswersData(nextAnswers);
                 setTimeout(() => {
-                    setCurrentQuestion(response.data.next_question);
-                    setCurrentQuestionIndex(prev => prev + 1);
-                    setProgress(response.data.progress);
+                    const nextIndex = currentQuestionIndex + 1;
+                    setCurrentQuestion(questions[nextIndex] || null);
+                    setCurrentQuestionIndex(nextIndex);
+                    setProgress({ current: nextIndex + 1, total: totalQuestions });
                     setAnswer('');
                     setAiState('listening');
                 }, 1200);
