@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-    BarChart3, Clock, Award, Zap, Flame, Target, Trash2, ArrowLeft,
-    TrendingUp, Calendar, Brain, Star, Shield, BookOpen, Lightbulb,
+    Clock, Award, Zap, Flame, Target, Trash2, ArrowLeft,
+    TrendingUp, Calendar, Brain, BookOpen, Lightbulb,
     Trophy, Sparkles, ChevronRight
 } from 'lucide-react';
 import {
@@ -242,7 +242,6 @@ function Achievements({ achievements }) {
     if (!achievements || achievements.length === 0) return null;
 
     const unlocked = achievements.filter(a => a.unlocked);
-    const locked = achievements.filter(a => !a.unlocked);
 
     return (
         <GlassCard glowColor="yellow">
