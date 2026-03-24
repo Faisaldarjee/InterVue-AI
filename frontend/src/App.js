@@ -173,7 +173,7 @@ export default function App() {
         onOpenAuth={() => openAuthModal('Welcome to InterVue AI')}
       />
 
-      <div className="pt-14">
+      <div className="pt-24">
         <AnimatePresence mode="wait">
           {page === 'landing' && (
             <motion.div key="landing" variants={pageVariants} initial="initial" animate="animate" exit="exit">
@@ -198,7 +198,7 @@ export default function App() {
           {page === 'resume-scorer' && (
             <motion.div key="resume-scorer" variants={pageVariants} initial="initial" animate="animate" exit="exit">
               <div className="min-h-screen bg-slate-950 relative">
-                <button onClick={handleBackToHome} className="absolute top-20 left-6 text-slate-400 hover:text-white flex items-center gap-2 z-40">Back</button>
+                <button onClick={handleBackToHome} className="absolute left-6 top-28 z-40 flex items-center gap-2 text-slate-400 hover:text-white">Back</button>
                 <ResumeUpload onAnalysisComplete={handleResumeAnalysisComplete} />
               </div>
             </motion.div>

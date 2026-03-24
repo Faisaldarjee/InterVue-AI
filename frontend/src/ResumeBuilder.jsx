@@ -367,7 +367,7 @@ export default function ResumeBuilder({ onBack }) {
                             </div>
                         </div>
                     )}
-                    <div style={{ position: showPreview ? 'relative' : 'sticky', top: 76 }}>
+                    <div style={{ position: showPreview ? 'relative' : 'sticky', top: 112 }}>
                         <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 18, padding: '18px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 13 }}><Eye size={14} color="#10b981" style={{ verticalAlign: 'middle', marginRight: 6 }}/>Live Preview</span><span style={{ fontSize: 11, color: 'rgba(148,163,184,.4)' }}>{TEMPLATES[template]?.name}</span></div>
                             <div style={{ borderRadius: 10, overflow: 'auto', maxHeight: showPreview ? 'none' : 'calc(100vh - 180px)', background: '#e5e7eb' }} className="preview-shadow">
