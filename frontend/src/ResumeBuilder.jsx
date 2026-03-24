@@ -11,8 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useResumeState, EMPTY_EXP, EMPTY_EDU, EMPTY_PROJ } from './components/ResumeBuilder/hooks/useResumeState';
 import { Field, TextArea, StepHeader, MiniBtn, AddBtn } from './components/ResumeBuilder/components/FormInputs';
 import ResumePreview from './components/ResumeBuilder/templates/ResumePreview';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { resolveApiBaseUrl } from './utils/apiBase';
 
 const FontLoader = () => (
     <style>{`
@@ -71,7 +70,8 @@ const STEPS = [
 
 async function aiEnhanceBullet(bullet, role, jobDescription) {
     try {
-        const res = await fetch(`${API_URL}/api/enhance-bullet`, {
+        const apiBaseUrl = await resolveApiBaseUrl();
+        const res = await fetch(`${apiBaseUrl}/api/enhance-bullet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bullet, job_role: role || 'Professional', job_description: jobDescription || '' })

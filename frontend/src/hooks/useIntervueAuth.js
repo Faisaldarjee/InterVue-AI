@@ -61,6 +61,7 @@ export default function useIntervueAuth({ onSignedOut }) {
     const handleAuthSuccess = (nextSession) => {
         setSession(nextSession);
         setShowAuthModal(false);
+        window.dispatchEvent(new CustomEvent('auth-success'));
     };
 
     const handleLogout = async () => {

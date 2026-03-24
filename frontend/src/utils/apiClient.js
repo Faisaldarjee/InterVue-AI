@@ -5,18 +5,18 @@
 
 import axios from 'axios';
 import { getAccessToken } from './supabaseClient';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { getApiBaseUrl, resolveApiBaseUrl } from './apiBase';
 
 // Create axios instance
 const apiClient = axios.create({
-    baseURL: API_URL,
+    baseURL: getApiBaseUrl(),
     timeout: 120000, // 2 min for AI processing
 });
 
 // Attach auth token to every request
 apiClient.interceptors.request.use(async (config) => {
     try {
+        config.baseURL = await resolveApiBaseUrl();
         const token = await getAccessToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;

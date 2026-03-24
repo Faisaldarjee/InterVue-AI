@@ -46,16 +46,22 @@ app = FastAPI(
     version="3.0.0"
 )
 
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://intervue-ai.vercel.app",
+    "https://intervue-ai.onrender.com",
+    "https://intervue-ai-backend.onrender.com",
+    "https://hirewise-backend.onrender.com",
+]
+if frontend_url:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://intervue-ai.vercel.app",
-        "https://intervue-ai.onrender.com",
-        "https://intervue-ai-backend.onrender.com",
-        os.getenv("FRONTEND_URL", "").strip(),
-    ],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
