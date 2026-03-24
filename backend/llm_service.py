@@ -9,10 +9,16 @@ import os
 import re
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import google.generativeai as genai
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env", override=False)
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 try:
     from advanced_smart_cache import advanced_cache
@@ -31,46 +37,102 @@ class EnhancedLLMService:
         if not self.main_api_key:
             raise ValueError("GEMINI_API_KEY not found in .env")
 
-        genai.configure(api_key=self.main_api_key)
-
-        preferred_model = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
-        fallback_models = [
-            preferred_model,
+        self.preferred_model = self._normalize_model_name(
+            os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
+        )
+        self.default_model_candidates = self._dedupe_models([
+            self.preferred_model,
             "models/gemini-2.0-flash",
+            "models/gemini-2.0-flash-lite",
             "models/gemini-1.5-flash",
             "models/gemini-1.5-flash-8b",
             "models/gemini-1.5-pro",
-        ]
+        ])
+        self._configured_api_key = None
+        self._discovered_models_by_key = {}
+        self._active_model_by_key = {}
 
-        self.model = None
-        last_error = None
-        for model_name in fallback_models:
-            try:
-                self.model = genai.GenerativeModel(model_name)
-                logger.info(f"Using model: {model_name}")
-                break
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Model init failed for {model_name}: {e}")
+        initial_model = self._select_model_for_key(self.main_api_key)
+        if initial_model is None:
+            raise RuntimeError("Unable to initialize any Gemini model for GEMINI_API_KEY")
 
-        # Final dynamic fallback if none of the specific models work
-        if self.model is None:
-            logger.info("Static fallbacks failed, trying dynamic model discovery...")
-            try:
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        self.model = genai.GenerativeModel(m.name)
-                        logger.info(f"Dynamically selected model: {m.name}")
-                        break
-            except Exception as e:
-                logger.error(f"Dynamic discovery failed: {e}")
-
-        if self.model is None:
-            raise RuntimeError(f"Unable to initialize any Gemini model. Last error: {last_error}")
+        self.model = genai.GenerativeModel(initial_model)
+        logger.info(f"Using Gemini model: {initial_model}")
 
         self.cache_stats = {"total_requests": 0, "cache_hits": 0, "api_calls": 0}
         self._api_calls_log = []
         self._hourly_limit = int(os.getenv("GEMINI_HOURLY_LIMIT", "55"))
+
+    def _normalize_model_name(self, model_name: str) -> str:
+        model_name = str(model_name or "").strip()
+        if not model_name:
+            return ""
+        return model_name if model_name.startswith("models/") else f"models/{model_name}"
+
+    def _dedupe_models(self, model_names: list) -> list:
+        seen = set()
+        deduped = []
+        for name in model_names:
+            normalized = self._normalize_model_name(name)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                deduped.append(normalized)
+        return deduped
+
+    def _set_api_key(self, api_key: str):
+        if api_key != self._configured_api_key:
+            genai.configure(api_key=api_key)
+            self._configured_api_key = api_key
+
+    def _discover_models_for_key(self, api_key: str, force_refresh: bool = False) -> list:
+        cache_key = api_key or ""
+        if not force_refresh and cache_key in self._discovered_models_by_key:
+            return self._discovered_models_by_key[cache_key]
+
+        discovered = []
+        try:
+            self._set_api_key(api_key)
+            for model in genai.list_models():
+                methods = getattr(model, "supported_generation_methods", []) or []
+                if "generateContent" in methods:
+                    discovered.append(model.name)
+        except Exception as e:
+            logger.warning(f"Gemini model discovery failed: {e}")
+
+        discovered = self._dedupe_models(discovered)
+        self._discovered_models_by_key[cache_key] = discovered
+        return discovered
+
+    def _build_model_pool(self, api_key: str, force_refresh: bool = False) -> list:
+        discovered = self._discover_models_for_key(api_key, force_refresh=force_refresh)
+        return self._dedupe_models(discovered + self.default_model_candidates)
+
+    def _select_model_for_key(self, api_key: str, force_refresh: bool = False, failed_model: str = None) -> str:
+        active_model = self._active_model_by_key.get(api_key)
+        if active_model and not force_refresh and active_model != failed_model:
+            return active_model
+
+        pool = self._build_model_pool(api_key, force_refresh=force_refresh)
+        for model_name in pool:
+            if model_name != failed_model:
+                self._active_model_by_key[api_key] = model_name
+                return model_name
+
+        self._active_model_by_key.pop(api_key, None)
+        return None
+
+    def _is_model_error(self, error_text: str) -> bool:
+        return any(token in error_text for token in [
+            "not found",
+            "is not found",
+            "model not found",
+            "unsupported model",
+            "does not support",
+            "not supported",
+            "permission denied",
+            "access denied",
+            "api has not been used",
+        ])
 
     def _check_budget(self) -> bool:
         cutoff = datetime.now() - timedelta(hours=1)
@@ -89,6 +151,7 @@ class EnhancedLLMService:
         self._api_calls_log = [t for t in self._api_calls_log if t > cutoff]
         used = len(self._api_calls_log)
         return {
+            "active_model": self._active_model_by_key.get(self.main_api_key),
             "used_this_hour": used,
             "limit": self._hourly_limit,
             "remaining": self._hourly_limit - used,
@@ -100,18 +163,35 @@ class EnhancedLLMService:
             logger.error("API budget exhausted for this hour. Using defaults.")
             return None
 
-        if use_resume_key and self.resume_api_key:
-            genai.configure(api_key=self.resume_api_key)
+        active_key = self.resume_api_key if use_resume_key and self.resume_api_key else self.main_api_key
+        self._set_api_key(active_key)
+        active_model_name = self._select_model_for_key(active_key)
+        if active_model_name is None:
+            logger.error("No Gemini model available for the configured API key.")
+            return None
 
         for attempt in range(max_retries):
             try:
-                response = self.model.generate_content(prompt)
+                model = genai.GenerativeModel(active_model_name)
+                if active_key == self.main_api_key:
+                    self.model = model
+                response = model.generate_content(prompt)
                 self._record_api_call()
-                if use_resume_key and self.resume_api_key:
-                    genai.configure(api_key=self.main_api_key)
                 return response.text
             except Exception as e:
                 error_str = str(e).lower()
+                if self._is_model_error(error_str):
+                    logger.warning(f"Gemini model {active_model_name} failed: {e}. Trying another available model...")
+                    active_model_name = self._select_model_for_key(
+                        active_key,
+                        force_refresh=True,
+                        failed_model=active_model_name,
+                    )
+                    if active_model_name:
+                        continue
+                    logger.error("No fallback Gemini model remained after model failure.")
+                    break
+
                 is_retryable = any(k in error_str for k in [
                     "resource exhausted", "429", "503", "unavailable", "deadline", "timeout", "quota", "rate"
                 ])
@@ -124,8 +204,8 @@ class EnhancedLLMService:
                 logger.error(f"API call failed permanently: {e}")
                 break
 
-        if use_resume_key and self.resume_api_key:
-            genai.configure(api_key=self.main_api_key)
+        if active_key != self.main_api_key:
+            self._set_api_key(self.main_api_key)
         return None
 
     def _clean_json_text(self, text: str) -> str:
