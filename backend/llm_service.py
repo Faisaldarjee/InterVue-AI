@@ -37,9 +37,9 @@ class EnhancedLLMService:
         fallback_models = [
             preferred_model,
             "models/gemini-2.0-flash",
-            "models/gemini-2.0-flash-lite",
-            "models/gemini-2.5-flash",
-            "models/gemini-2.5-pro",
+            "models/gemini-1.5-flash",
+            "models/gemini-1.5-flash-8b",
+            "models/gemini-1.5-pro",
         ]
 
         self.model = None
@@ -53,8 +53,20 @@ class EnhancedLLMService:
                 last_error = e
                 logger.warning(f"Model init failed for {model_name}: {e}")
 
+        # Final dynamic fallback if none of the specific models work
         if self.model is None:
-            raise RuntimeError(f"Unable to initialize any Gemini model: {last_error}")
+            logger.info("Static fallbacks failed, trying dynamic model discovery...")
+            try:
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        self.model = genai.GenerativeModel(m.name)
+                        logger.info(f"Dynamically selected model: {m.name}")
+                        break
+            except Exception as e:
+                logger.error(f"Dynamic discovery failed: {e}")
+
+        if self.model is None:
+            raise RuntimeError(f"Unable to initialize any Gemini model. Last error: {last_error}")
 
         self.cache_stats = {"total_requests": 0, "cache_hits": 0, "api_calls": 0}
         self._api_calls_log = []
